@@ -21,6 +21,7 @@ interface CommandItem {
   id: string;
   category: Category;
   title: string;
+  note?: string;
   command: string;
   groupId?: string;
 }
@@ -43,8 +44,11 @@ const DEFAULT_CATEGORIES: Category[] = [
   "npm",
 ];
 
-const STORAGE_ITEMS_KEY = "command_pocket_items_v3";
-const LEGACY_ITEMS_KEY = "command_pocket_items_v2";
+const STORAGE_ITEMS_KEY = "command_pocket_items_v4";
+const LEGACY_ITEM_KEYS = [
+  "command_pocket_items_v3",
+  "command_pocket_items_v2",
+];
 const STORAGE_CATS_KEY = "command_pocket_categories_v3";
 const LEGACY_CATS_KEY = "command_pocket_categories_v2";
 const STORAGE_GROUPS_KEY = "command_pocket_groups_v1";
@@ -175,7 +179,7 @@ function loadCategories(): CategoryItem[] {
 
 function loadItems(): CommandItem[] {
   try {
-    for (const key of [STORAGE_ITEMS_KEY, LEGACY_ITEMS_KEY]) {
+    for (const key of [STORAGE_ITEMS_KEY, ...LEGACY_ITEM_KEYS]) {
       const raw = localStorage.getItem(key);
       if (raw === null) continue;
       const parsed: unknown = JSON.parse(raw);
@@ -194,6 +198,10 @@ function loadItems(): CommandItem[] {
         })
         .map((entry) => ({
           ...entry,
+          note:
+            typeof entry.note === "string" && entry.note.trim()
+              ? entry.note
+              : undefined,
           groupId: typeof entry.groupId === "string" ? entry.groupId : undefined,
         }));
     }
@@ -345,8 +353,10 @@ const zhTW = {
   copyFailed: "複製失敗，請手動選取指令",
   editCommand: "修改指令",
   deleteCommand: "刪除指令",
-  commandTitle: "指令說明",
-  commandTitlePlaceholder: "指令說明，例如：查看目前分支狀態",
+  commandTitle: "標題",
+  commandTitlePlaceholder: "標題可留空，例如：查看目前分支狀態",
+  commandNote: "說明",
+  commandNotePlaceholder: "詳細說明、使用情境或注意事項",
   commandContent: "指令內容",
   commandContentPlaceholder: "指令內容，例如：git status",
   commandAdded: "指令已新增",
@@ -462,8 +472,10 @@ const en: Strings = {
   copyFailed: "Copy failed; please select the command manually",
   editCommand: "Edit command",
   deleteCommand: "Delete command",
-  commandTitle: "Command title",
-  commandTitlePlaceholder: "e.g. Show current branch status",
+  commandTitle: "Title",
+  commandTitlePlaceholder: "Title optional, e.g. Show current branch status",
+  commandNote: "Notes",
+  commandNotePlaceholder: "Details, use cases, or things to remember",
   commandContent: "Command content",
   commandContentPlaceholder: "e.g. git status",
   commandAdded: "Command added",
@@ -622,6 +634,7 @@ export default function App() {
   const [ungroupedCollapsed, setUngroupedCollapsed] = useState(false);
   const [cmdForm, setCmdForm] = useState<CmdForm | null>(null);
   const [titleInput, setTitleInput] = useState("");
+  const [noteInput, setNoteInput] = useState("");
   const [commandInput, setCommandInput] = useState("");
   const [groupSelect, setGroupSelect] = useState(UNGROUPED_KEY);
   const [categoryQuery, setCategoryQuery] = useState("");
@@ -844,12 +857,16 @@ export default function App() {
     setCatPanel("none");
     setShowGroupAdd(false);
     setCmdForm(null);
+    setTitleInput("");
+    setNoteInput("");
+    setCommandInput("");
     setNewCatName("");
     setEditingCategory("");
     setEditCatName("");
     setCatError("");
     setGroupError("");
     setRenamingGroupId(null);
+    setRenameInput("");
     setDraggingCat(null);
     setDropCat(null);
   };
@@ -899,9 +916,11 @@ export default function App() {
   const activeCategoryItems = items.filter(
     (item) =>
       item.category === activeTab &&
-      (!normalizedSearch ||
-        item.title.toLowerCase().includes(normalizedSearch) ||
-        item.command.toLowerCase().includes(normalizedSearch)),
+        (!normalizedSearch ||
+          item.title.toLowerCase().includes(normalizedSearch) ||
+          item.note?.toLowerCase().includes(normalizedSearch) ||
+          item.command.toLowerCase().includes(normalizedSearch)),
+
   );
   const ungroupedItems = activeCategoryItems.filter((item) => !item.groupId);
 
@@ -1057,6 +1076,7 @@ export default function App() {
   };
 
   const startRenameGroup = (group: GroupItem) => {
+    closeForms();
     setRenamingGroupId(group.id);
     setRenameInput(group.name);
   };
@@ -1100,6 +1120,7 @@ export default function App() {
   };
 
   const requestDeleteGroup = (group: GroupItem) => {
+    closeForms();
     setConfirmDialog({
       kind: "group",
       id: group.id,
@@ -1163,6 +1184,7 @@ export default function App() {
 
   const openAddCmdForm = () => {
     setTitleInput("");
+    setNoteInput("");
     setCommandInput("");
     setGroupSelect(UNGROUPED_KEY);
     setCmdForm({ mode: "add" });
@@ -1174,6 +1196,7 @@ export default function App() {
 
   const openEditCmdForm = (item: CommandItem) => {
     setTitleInput(item.title);
+    setNoteInput(item.note ?? "");
     setCommandInput(item.command);
     setGroupSelect(item.groupId ?? UNGROUPED_KEY);
     setCmdForm({ mode: "edit", item });
@@ -1186,8 +1209,9 @@ export default function App() {
   const handleSaveCmd = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedTitle = titleInput.trim();
+    const trimmedNote = noteInput.trim();
     const trimmedCommand = commandInput.trim();
-    if (!trimmedTitle || !trimmedCommand || !activeTab || !cmdForm) return;
+    if (!trimmedCommand || !activeTab || !cmdForm) return;
 
     const groupId = groupSelect === UNGROUPED_KEY ? undefined : groupSelect;
 
@@ -1196,7 +1220,13 @@ export default function App() {
       setItems((prev) =>
         prev.map((item) =>
           item.id === id
-            ? { ...item, title: trimmedTitle, command: trimmedCommand, groupId }
+            ? {
+                ...item,
+                title: trimmedTitle,
+                note: trimmedNote || undefined,
+                command: trimmedCommand,
+                groupId,
+              }
             : item,
         ),
       );
@@ -1206,6 +1236,7 @@ export default function App() {
         id: `${activeTab}-${Date.now()}`,
         category: activeTab,
         title: trimmedTitle,
+        note: trimmedNote || undefined,
         command: trimmedCommand,
         groupId,
       };
@@ -1215,6 +1246,7 @@ export default function App() {
 
     setCmdForm(null);
     setTitleInput("");
+    setNoteInput("");
     setCommandInput("");
     setGroupSelect(UNGROUPED_KEY);
   };
@@ -1332,7 +1364,9 @@ export default function App() {
           })
         : fmt(t.deleteCommandText, {
             title:
-              confirmDialog?.kind === "command" ? confirmDialog.item.title : "",
+              confirmDialog?.kind === "command"
+                ? confirmDialog.item.title || confirmDialog.item.command
+                : "",
           });
 
   const emptyTitle =
@@ -1350,9 +1384,6 @@ export default function App() {
 
   const renderCard = (item: CommandItem) => {
     const isCopied = copiedId === item.id;
-    const groupName = item.groupId
-      ? groups.find((g) => g.id === item.groupId)?.name
-      : undefined;
 
     return (
       <article
@@ -1375,8 +1406,6 @@ export default function App() {
         <div className="cmd-main">
           <div className="cmd-title-row">
             <span className="cmd-title">{item.title}</span>
-            <span className="cmd-tag">{item.category}</span>
-            {groupName && <span className="cmd-tag cmd-tag--group">{groupName}</span>}
           </div>
           <code
             className="cmd-code"
@@ -1926,8 +1955,17 @@ export default function App() {
             className="field"
             placeholder={t.commandTitlePlaceholder}
             value={titleInput}
+            maxLength={40}
             onChange={(e) => setTitleInput(e.target.value)}
             aria-label={t.commandTitle}
+          />
+          <textarea
+            className="field field--textarea"
+            placeholder={t.commandNotePlaceholder}
+            value={noteInput}
+            onChange={(e) => setNoteInput(e.target.value)}
+            aria-label={t.commandNote}
+            rows={4}
           />
           <input
             type="text"
@@ -1958,6 +1996,43 @@ export default function App() {
         </form>
       )}
 
+      {renamingGroupId && (
+        <form
+          className="panel"
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveRenameGroup();
+          }}
+        >
+          <div className="panel-head">
+            <div className="panel-title">{t.renameGroup}</div>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setRenamingGroupId(null)}
+              title={t.cancelRename}
+              aria-label={t.cancelRename}
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          <input
+            autoFocus
+            type="text"
+            className="field"
+            placeholder={t.groupNewName}
+            value={renameInput}
+            onChange={(e) => setRenameInput(e.target.value)}
+            aria-label={t.groupNewName}
+          />
+          <div className="form-actions">
+            <button type="submit" className="btn btn--primary">
+              {t.saveName}
+            </button>
+          </div>
+        </form>
+      )}
+
       <main className="list">
         {activeCategoryItems.length === 0 ? (
           <div className="empty">
@@ -1982,73 +2057,32 @@ export default function App() {
               );
               if (normalizedSearch && groupItems.length === 0) return null;
 
-              const isRenaming = renamingGroupId === group.id;
               return renderSection(
                 group.id,
                 group.name,
                 groupItems,
                 normalizedSearch ? true : !group.collapsed,
                 () => toggleGroupCollapse(group.id),
-                isRenaming ? (
-                  <>
-                    <input
-                      autoFocus
-                      type="text"
-                      className="field group-rename"
-                      value={renameInput}
-                      onChange={(e) => setRenameInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          saveRenameGroup();
-                        } else if (e.key === "Escape") {
-                          e.stopPropagation();
-                          setRenamingGroupId(null);
-                        }
-                      }}
-                      aria-label={t.groupNewName}
-                    />
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={saveRenameGroup}
-                      title={t.saveName}
-                      aria-label={t.saveName}
-                    >
-                      <CheckIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => setRenamingGroupId(null)}
-                      title={t.cancelRename}
-                      aria-label={t.cancelRename}
-                    >
-                      <CloseIcon />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => startRenameGroup(group)}
-                      title={t.renameGroup}
-                      aria-label={fmt(t.renameItem, { name: group.name })}
-                    >
-                      <EditIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn--danger"
-                      onClick={() => requestDeleteGroup(group)}
-                      title={t.deleteGroup}
-                      aria-label={fmt(t.deleteGroupItem, { name: group.name })}
-                    >
-                      <TrashIcon />
-                    </button>
-                  </>
-                ),
+                <>
+                  <button
+                    type="button"
+                    className={`icon-btn${renamingGroupId === group.id ? " is-active" : ""}`}
+                    onClick={() => startRenameGroup(group)}
+                    title={t.renameGroup}
+                    aria-label={fmt(t.renameItem, { name: group.name })}
+                  >
+                    <EditIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--danger"
+                    onClick={() => requestDeleteGroup(group)}
+                    title={t.deleteGroup}
+                    aria-label={fmt(t.deleteGroupItem, { name: group.name })}
+                  >
+                    <TrashIcon />
+                  </button>
+                </>,
               );
             })}
           </>

@@ -677,6 +677,12 @@ kbd {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
 }
 
+.field--textarea {
+  min-height: 88px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 .form-row,
 .form-actions {
   display: flex;
@@ -863,12 +869,22 @@ kbd {
   align-items: center;
   gap: 3px;
   margin-left: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s;
 }
 
-.group-rename {
-  width: 110px;
-  padding: 4px 7px;
-  font-size: 11px;
+.group-header:hover .group-actions,
+.group-header:focus-within .group-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .group-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .group-items {
@@ -927,22 +943,6 @@ kbd {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cmd-tag {
-  padding: 1px 5px;
-  flex: none;
-  border: 1px solid rgba(76, 141, 255, 0.3);
-  border-radius: 5px;
-  background: rgba(76, 141, 255, 0.1);
-  color: #93c5fd;
-  font-size: 9px;
-}
-
-.cmd-tag--group {
-  border-color: rgba(167, 139, 250, 0.35);
-  background: rgba(167, 139, 250, 0.12);
-  color: #c4b5fd;
 }
 
 .drag-handle {
