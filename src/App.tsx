@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import appIcon from "../app-icon.png";
 
 type Category = string;
 
@@ -45,6 +48,8 @@ const LEGACY_ITEMS_KEY = "command_pocket_items_v2";
 const STORAGE_CATS_KEY = "command_pocket_categories_v3";
 const LEGACY_CATS_KEY = "command_pocket_categories_v2";
 const STORAGE_GROUPS_KEY = "command_pocket_groups_v1";
+const STORAGE_THEME_KEY = "command_pocket_theme_v1";
+const STORAGE_LANG_KEY = "command_pocket_lang_v1";
 
 const DEFAULT_COMMANDS: CommandItem[] = [
   {
@@ -230,6 +235,258 @@ function loadGroups(): GroupItem[] {
   }
 }
 
+type Theme = "dark" | "light";
+type Lang = "zh-TW" | "en";
+
+function loadTheme(): Theme {
+  try {
+    return localStorage.getItem(STORAGE_THEME_KEY) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function loadLang(): Lang {
+  try {
+    return localStorage.getItem(STORAGE_LANG_KEY) === "en" ? "en" : "zh-TW";
+  } catch {
+    return "zh-TW";
+  }
+}
+
+function fmt(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
+}
+
+const zhTW = {
+  tagline: "常用指令收納，一鍵複製",
+  settings: "設定",
+  openSettings: "開啟設定選單",
+  pinWindow: "固定畫面",
+  pinFailed: "固定畫面設定失敗",
+  pinned: "已固定畫面",
+  unpinned: "已取消固定畫面",
+  theme: "主題",
+  dark: "深色",
+  light: "淺色",
+  themeDark: "已切換深色主題",
+  themeLight: "已切換淺色主題",
+  language: "語系",
+  langZH: "繁中",
+  langEN: "English",
+  category: "分類",
+  command: "指令",
+  group: "群組",
+  ungrouped: "未分組",
+  edit: "編輯",
+  add: "新增",
+  save: "儲存",
+  cancel: "取消",
+  done: "完成",
+  addCategory: "新增分類",
+  manageCategories: "管理所有分類（改名、鎖定、刪除）",
+  manageCategoriesShort: "管理所有分類",
+  manageCategoryTitle: "管理分類（鎖定後無法刪除）",
+  categoryName: "分類名稱",
+  categoryPlaceholder: "例如：docker、sql、linux",
+  categoryExists: "這個分類已經存在了",
+  categoryAdded: "分類已新增",
+  categoryRenamed: "分類已重新命名",
+  categoryUnlocked: "分類已解鎖",
+  categoryLocked: "分類已鎖定，可避免誤刪",
+  unlockBeforeDelete: "請先解鎖分類再刪除",
+  categoryOrderUpdated: "分類順序已更新",
+  categoryDeleted: "分類、群組與所屬指令已刪除",
+  dragSort: "拖曳排序",
+  dragSortItem: "拖曳排序 {name}",
+  rename: "重新命名",
+  renameItem: "重新命名 {name}",
+  renameCategory: "重新命名分類",
+  saveName: "儲存名稱",
+  cancelRename: "取消改名",
+  itemsUnit: "{count} 筆",
+  lockCategory: "鎖定分類",
+  unlockCategory: "解鎖分類",
+  lockItem: "鎖定 {name}",
+  unlockItem: "解鎖 {name}",
+  deleteCategory: "刪除分類",
+  deleteCategoryItem: "刪除分類 {name}",
+  locked: "已鎖定",
+  searchCategory: "搜尋分類",
+  noCategoryMatch: "找不到符合的分類",
+  scrollLeft: "向左捲動分類",
+  scrollRight: "向右捲動分類",
+  categoriesNav: "指令分類",
+  searchCommands: "搜尋目前分類的指令說明或內容",
+  searchShortcut: "Ctrl + K 搜尋",
+  addCommand: "新增指令",
+  addGroup: "新增群組",
+  addGroupIn: '在「{name}」新增群組',
+  groupName: "群組名稱",
+  groupNewName: "群組新名稱",
+  groupOf: "所屬群組",
+  groupPlaceholder: "例如：部署流程、常用查詢",
+  groupExists: "這個群組已經存在了",
+  groupAdded: "群組已新增",
+  groupRenamed: "群組已重新命名",
+  deleteGroup: "刪除群組",
+  deleteGroupItem: "刪除群組 {name}",
+  renameGroup: "重新命名群組",
+  groupDeleted: "群組已刪除，指令已回到未分組",
+  collapseGroup: "收合群組",
+  expandGroup: "展開群組",
+  dropHere: "拖曳指令卡片到這裡",
+  dragToGroup: "拖曳移動到群組",
+  copy: "複製指令",
+  copied: "已複製",
+  copyDone: "指令已複製到剪貼簿",
+  copyFailed: "複製失敗，請手動選取指令",
+  editCommand: "修改指令",
+  deleteCommand: "刪除指令",
+  commandTitle: "指令說明",
+  commandTitlePlaceholder: "指令說明，例如：查看目前分支狀態",
+  commandContent: "指令內容",
+  commandContentPlaceholder: "指令內容，例如：git status",
+  commandAdded: "指令已新增",
+  commandUpdated: "指令已更新",
+  commandDeleted: "指令已刪除",
+  movedToGroup: '已移動到「{name}」',
+  movedToUngrouped: "已移至未分組",
+  deleteCategoryTitle: '刪除分類「{name}」？',
+  deleteGroupTitle: '刪除群組「{name}」？',
+  deleteCommandTitle: "刪除這筆指令？",
+  deleteCategoryText:
+    "分類內的 {count} 筆指令與 {groups} 個群組會一併刪除，此動作無法復原。",
+  deleteGroupText: "群組內的 {count} 筆指令會回到「未分組」，不會被刪除。",
+  deleteCommandText: "「{title}」將被刪除，此動作無法復原。",
+  confirmDelete: "確認刪除",
+  noCategories: "尚未建立分類",
+  noCommandsFound: "找不到符合的指令",
+  noCommandsIn: "「{name}」還沒有指令",
+  emptyCategoryHint: "先點分類搜尋下方的 + 建立一個分類。",
+  emptySearchHint: "試試其他關鍵字，或清空搜尋條件。",
+  emptyCommandsHint: "點「+ 指令」加入第一筆。",
+  statusSummary:
+    "{categories} 個分類 · {groups} 個群組 · 顯示 {shown} / {total} 筆指令",
+};
+
+type Strings = typeof zhTW;
+
+const en: Strings = {
+  tagline: "Your everyday commands, one click away",
+  settings: "Settings",
+  openSettings: "Open settings menu",
+  pinWindow: "Keep on top",
+  pinFailed: "Failed to change window pinning",
+  pinned: "Window pinned on top",
+  unpinned: "Window unpinned",
+  theme: "Theme",
+  dark: "Dark",
+  light: "Light",
+  themeDark: "Switched to dark theme",
+  themeLight: "Switched to light theme",
+  language: "Language",
+  langZH: "繁中",
+  langEN: "English",
+  category: "Category",
+  command: "Command",
+  group: "Group",
+  ungrouped: "Ungrouped",
+  edit: "Edit",
+  add: "Add",
+  save: "Save",
+  cancel: "Cancel",
+  done: "Done",
+  addCategory: "Add category",
+  manageCategories: "Manage all categories (rename, lock, delete)",
+  manageCategoriesShort: "Manage all categories",
+  manageCategoryTitle: "Manage categories (locked categories cannot be deleted)",
+  categoryName: "Category name",
+  categoryPlaceholder: "e.g. docker, sql, linux",
+  categoryExists: "This category already exists",
+  categoryAdded: "Category added",
+  categoryRenamed: "Category renamed",
+  categoryUnlocked: "Category unlocked",
+  categoryLocked: "Category locked to prevent accidental deletion",
+  unlockBeforeDelete: "Unlock the category before deleting it",
+  categoryOrderUpdated: "Category order updated",
+  categoryDeleted: "Category, its groups, and commands were deleted",
+  dragSort: "Drag to reorder",
+  dragSortItem: "Drag to reorder {name}",
+  rename: "Rename",
+  renameItem: "Rename {name}",
+  renameCategory: "Rename category",
+  saveName: "Save name",
+  cancelRename: "Cancel rename",
+  itemsUnit: "{count} items",
+  lockCategory: "Lock category",
+  unlockCategory: "Unlock category",
+  lockItem: "Lock {name}",
+  unlockItem: "Unlock {name}",
+  deleteCategory: "Delete category",
+  deleteCategoryItem: "Delete category {name}",
+  locked: "Locked",
+  searchCategory: "Search categories",
+  noCategoryMatch: "No matching categories",
+  scrollLeft: "Scroll categories left",
+  scrollRight: "Scroll categories right",
+  categoriesNav: "Command categories",
+  searchCommands: "Search command titles or content in this category",
+  searchShortcut: "Ctrl + K to search",
+  addCommand: "Add command",
+  addGroup: "Add group",
+  addGroupIn: 'Add group in "{name}"',
+  groupName: "Group name",
+  groupNewName: "New group name",
+  groupOf: "Group",
+  groupPlaceholder: "e.g. Deployment, Common queries",
+  groupExists: "This group already exists",
+  groupAdded: "Group added",
+  groupRenamed: "Group renamed",
+  deleteGroup: "Delete group",
+  deleteGroupItem: 'Delete group "{name}"',
+  renameGroup: "Rename group",
+  groupDeleted: "Group deleted; commands moved to Ungrouped",
+  collapseGroup: "Collapse group",
+  expandGroup: "Expand group",
+  dropHere: "Drag a command card here",
+  dragToGroup: "Drag to move to a group",
+  copy: "Copy command",
+  copied: "Copied",
+  copyDone: "Command copied to clipboard",
+  copyFailed: "Copy failed; please select the command manually",
+  editCommand: "Edit command",
+  deleteCommand: "Delete command",
+  commandTitle: "Command title",
+  commandTitlePlaceholder: "e.g. Show current branch status",
+  commandContent: "Command content",
+  commandContentPlaceholder: "e.g. git status",
+  commandAdded: "Command added",
+  commandUpdated: "Command updated",
+  commandDeleted: "Command deleted",
+  movedToGroup: 'Moved to "{name}"',
+  movedToUngrouped: "Moved to Ungrouped",
+  deleteCategoryTitle: 'Delete category "{name}"?',
+  deleteGroupTitle: 'Delete group "{name}"?',
+  deleteCommandTitle: "Delete this command?",
+  deleteCategoryText:
+    "{count} commands and {groups} groups in this category will be deleted. This cannot be undone.",
+  deleteGroupText:
+    "{count} commands in this group will move to Ungrouped and will not be deleted.",
+  deleteCommandText: '"{title}" will be deleted. This cannot be undone.',
+  confirmDelete: "Delete",
+  noCategories: "No categories yet",
+  noCommandsFound: "No matching commands",
+  noCommandsIn: '"{name}" has no commands yet',
+  emptyCategoryHint: "Click + below the category search to create a category.",
+  emptySearchHint: "Try another keyword or clear the search.",
+  emptyCommandsHint: 'Click "+ Command" to add the first one.',
+  statusSummary:
+    "{categories} categories · {groups} groups · showing {shown} / {total} commands",
+};
+
+const I18N: Record<Lang, Strings> = { "zh-TW": zhTW, en };
+
 function Icon({ children }: { children: React.ReactNode }) {
   return (
     <svg
@@ -293,6 +550,14 @@ function CloseIcon() {
   );
 }
 
+function MenuIcon() {
+  return (
+    <Icon>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </Icon>
+  );
+}
+
 function PlusIcon() {
   return (
     <Icon>
@@ -327,6 +592,13 @@ export default function App() {
   const [editingCategory, setEditingCategory] = useState<Category>("");
   const [editCatName, setEditCatName] = useState("");
   const [catError, setCatError] = useState("");
+  const [draggingCat, setDraggingCat] = useState<Category | null>(null);
+  const [dropCat, setDropCat] = useState<Category | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [alwaysOnTop, setAlwaysOnTop] = useState(true);
+  const [theme, setTheme] = useState<Theme>(loadTheme);
+  const [lang, setLang] = useState<Lang>(loadLang);
+  const t = I18N[lang];
   const [showGroupAdd, setShowGroupAdd] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
   const [groupError, setGroupError] = useState("");
@@ -437,7 +709,9 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (confirmDialog) {
+        if (menuOpen) {
+          setMenuOpen(false);
+        } else if (confirmDialog) {
           setConfirmDialog(null);
         } else if (renamingGroupId) {
           setRenamingGroupId(null);
@@ -463,6 +737,7 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    menuOpen,
     confirmDialog,
     renamingGroupId,
     catPanel,
@@ -476,6 +751,39 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem(STORAGE_THEME_KEY, theme);
+    } catch {}
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = lang === "en" ? "en" : "zh-Hant";
+    try {
+      localStorage.setItem(STORAGE_LANG_KEY, lang);
+    } catch {}
+  }, [lang]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    getCurrentWindow()
+      .isAlwaysOnTop()
+      .then(setAlwaysOnTop)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest(".menu-wrap")) {
+        setMenuOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [menuOpen]);
+
   const showToast = (message: string) => {
     setToast(message);
     if (toastTimer.current !== null) clearTimeout(toastTimer.current);
@@ -483,6 +791,33 @@ export default function App() {
       setToast("");
       toastTimer.current = null;
     }, 1800);
+  };
+
+  const toggleAlwaysOnTop = async () => {
+    const next = !alwaysOnTop;
+    if (isTauri()) {
+      try {
+        await getCurrentWindow().setAlwaysOnTop(next);
+      } catch {
+        showToast(t.pinFailed);
+        return;
+      }
+    }
+    setAlwaysOnTop(next);
+    setMenuOpen(false);
+    showToast(next ? t.pinned : t.unpinned);
+  };
+
+  const toggleTheme = () => {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    setMenuOpen(false);
+    showToast(next === "dark" ? t.themeDark : t.themeLight);
+  };
+
+  const toggleLang = () => {
+    setLang(lang === "zh-TW" ? "en" : "zh-TW");
+    setMenuOpen(false);
   };
 
   const closeForms = () => {
@@ -495,6 +830,8 @@ export default function App() {
     setCatError("");
     setGroupError("");
     setRenamingGroupId(null);
+    setDraggingCat(null);
+    setDropCat(null);
   };
 
   const toggleCatPanel = (panel: "add" | "edit") => {
@@ -556,7 +893,7 @@ export default function App() {
     if (
       categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())
     ) {
-      setCatError("這個分類已經存在了");
+      setCatError(t.categoryExists);
       return;
     }
 
@@ -566,7 +903,7 @@ export default function App() {
     setNewCatName("");
     setCatError("");
     setCatPanel("none");
-    showToast("分類已新增");
+    showToast(t.categoryAdded);
   };
 
   const handleRenameCategory = (e: React.FormEvent) => {
@@ -587,7 +924,7 @@ export default function App() {
           c.name.toLowerCase() === trimmed.toLowerCase(),
       )
     ) {
-      setCatError("這個分類已經存在了");
+      setCatError(t.categoryExists);
       return;
     }
 
@@ -609,7 +946,9 @@ export default function App() {
     setEditingCategory("");
     setEditCatName("");
     setCatError("");
-    showToast("分類已重新命名");
+    setDraggingCat(null);
+    setDropCat(null);
+    showToast(t.categoryRenamed);
   };
 
   const toggleCategoryLock = (name: Category) => {
@@ -619,15 +958,51 @@ export default function App() {
     setCategories((prev) =>
       prev.map((c) => (c.name === name ? { ...c, locked: !c.locked } : c)),
     );
-    showToast(target.locked ? "分類已解鎖" : "分類已鎖定，可避免誤刪");
+    showToast(target.locked ? t.categoryUnlocked : t.categoryLocked);
   };
 
   const requestDeleteCategory = (name: Category) => {
     if (categories.find((c) => c.name === name)?.locked) {
-      showToast("請先解鎖分類再刪除");
+      showToast(t.unlockBeforeDelete);
       return;
     }
     setConfirmDialog({ kind: "category", name });
+  };
+
+  const handleCatDragStart = (e: React.DragEvent<HTMLElement>, name: Category) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", name);
+    setDraggingCat(name);
+  };
+
+  const handleCatDragOver = (e: React.DragEvent<HTMLElement>, target: Category) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropCat(target);
+  };
+
+  const handleCatDragLeave = (e: React.DragEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setDropCat(null);
+    }
+  };
+
+  const handleCatDrop = (e: React.DragEvent<HTMLElement>, target: Category) => {
+    e.preventDefault();
+    const name = e.dataTransfer.getData("text/plain") || draggingCat;
+    setDraggingCat(null);
+    setDropCat(null);
+    if (!name || name === target) return;
+
+    const from = categories.findIndex((c) => c.name === name);
+    const to = categories.findIndex((c) => c.name === target);
+    if (from < 0 || to < 0 || from === to) return;
+
+    const next = [...categories];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setCategories(next);
+    showToast(t.categoryOrderUpdated);
   };
 
   const handleAddGroup = (e: React.FormEvent) => {
@@ -642,7 +1017,7 @@ export default function App() {
           g.name.toLowerCase() === trimmed.toLowerCase(),
       )
     ) {
-      setGroupError("這個群組已經存在了");
+      setGroupError(t.groupExists);
       return;
     }
 
@@ -658,7 +1033,7 @@ export default function App() {
     setGroupNameInput("");
     setGroupError("");
     setShowGroupAdd(false);
-    showToast("群組已新增");
+    showToast(t.groupAdded);
   };
 
   const startRenameGroup = (group: GroupItem) => {
@@ -687,7 +1062,7 @@ export default function App() {
           g.name.toLowerCase() === trimmed.toLowerCase(),
       )
     ) {
-      showToast("這個群組已經存在了");
+      showToast(t.groupExists);
       return;
     }
 
@@ -695,7 +1070,7 @@ export default function App() {
       prev.map((g) => (g.id === target.id ? { ...g, name: trimmed } : g)),
     );
     setRenamingGroupId(null);
-    showToast("群組已重新命名");
+    showToast(t.groupRenamed);
   };
 
   const toggleGroupCollapse = (id: string) => {
@@ -727,10 +1102,12 @@ export default function App() {
         setEditingCategory("");
         setEditCatName("");
       }
+      if (draggingCat === name) setDraggingCat(null);
+      if (dropCat === name) setDropCat(null);
       if (copiedId && items.find((item) => item.id === copiedId)?.category === name) {
         setCopiedId(null);
       }
-      showToast("分類、群組與所屬指令已刪除");
+      showToast(t.categoryDeleted);
     } else if (confirmDialog.kind === "group") {
       const { id } = confirmDialog;
       setGroups((prev) => prev.filter((g) => g.id !== id));
@@ -740,12 +1117,12 @@ export default function App() {
         ),
       );
       if (groupSelect === id) setGroupSelect(UNGROUPED_KEY);
-      showToast("群組已刪除，指令已回到未分組");
+      showToast(t.groupDeleted);
     } else {
       const { item } = confirmDialog;
       setItems((prev) => prev.filter((entry) => entry.id !== item.id));
       if (copiedId === item.id) setCopiedId(null);
-      showToast("指令已刪除");
+      showToast(t.commandDeleted);
     }
 
     setConfirmDialog(null);
@@ -758,9 +1135,9 @@ export default function App() {
       setTimeout(() => {
         setCopiedId((prev) => (prev === item.id ? null : prev));
       }, 1500);
-      showToast("指令已複製到剪貼簿");
+      showToast(t.copyDone);
     } catch {
-      showToast("複製失敗，請手動選取指令");
+      showToast(t.copyFailed);
     }
   };
 
@@ -803,7 +1180,7 @@ export default function App() {
             : item,
         ),
       );
-      showToast("指令已更新");
+      showToast(t.commandUpdated);
     } else {
       const newItem: CommandItem = {
         id: `${activeTab}-${Date.now()}`,
@@ -813,7 +1190,7 @@ export default function App() {
         groupId,
       };
       setItems((prev) => [...prev, newItem]);
-      showToast("指令已新增");
+      showToast(t.commandAdded);
     }
 
     setCmdForm(null);
@@ -850,36 +1227,47 @@ export default function App() {
       prev.map((item) => (item.id === id ? { ...item, groupId } : item)),
     );
     const groupName = groups.find((g) => g.id === groupId)?.name;
-    showToast(groupId ? `已移動到「${groupName ?? "群組"}」` : "已移至未分組");
+    showToast(
+      groupId ? fmt(t.movedToGroup, { name: groupName ?? t.group }) : t.movedToUngrouped,
+    );
     setDraggingId(null);
     setDropTarget(null);
   };
 
   const confirmTitle =
     confirmDialog?.kind === "category"
-      ? `刪除分類「${confirmDialog.name}」？`
+      ? fmt(t.deleteCategoryTitle, { name: confirmDialog.name })
       : confirmDialog?.kind === "group"
-        ? `刪除群組「${confirmDialog.name}」？`
-        : "刪除這筆指令？";
+        ? fmt(t.deleteGroupTitle, { name: confirmDialog.name })
+        : t.deleteCommandTitle;
   const confirmText =
     confirmDialog?.kind === "category"
-      ? `分類內的 ${categoryCounts.get(confirmDialog.name) ?? 0} 筆指令與 ${groups.filter((g) => g.category === confirmDialog.name).length} 個群組會一併刪除，此動作無法復原。`
+      ? fmt(t.deleteCategoryText, {
+          count: categoryCounts.get(confirmDialog.name) ?? 0,
+          groups: groups.filter((g) => g.category === confirmDialog.name).length,
+        })
       : confirmDialog?.kind === "group"
-        ? `群組內的 ${confirmDialog.count} 筆指令會回到「未分組」，不會被刪除。`
-        : `「${confirmDialog?.kind === "command" ? confirmDialog.item.title : ""}」將被刪除，此動作無法復原。`;
+        ? fmt(t.deleteGroupText, {
+            count: confirmDialog.count,
+            ungrouped: t.ungrouped,
+          })
+        : fmt(t.deleteCommandText, {
+            title:
+              confirmDialog?.kind === "command" ? confirmDialog.item.title : "",
+          });
 
   const emptyTitle =
     categories.length === 0
-      ? "尚未建立分類"
+      ? t.noCategories
       : normalizedSearch
-        ? "找不到符合的指令"
-        : `「${activeTab}」還沒有指令`;
+        ? t.noCommandsFound
+        : fmt(t.noCommandsIn, { name: activeTab });
   const emptyText =
     categories.length === 0
-      ? "先點分類搜尋下方的 + 建立一個分類。"
+      ? t.emptyCategoryHint
       : normalizedSearch
-        ? "試試其他關鍵字，或清空搜尋條件。"
-        : "點「+ 指令」加入第一筆。";
+        ? t.emptySearchHint
+        : t.emptyCommandsHint;
 
   const renderCard = (item: CommandItem) => {
     const isCopied = copiedId === item.id;
@@ -898,7 +1286,7 @@ export default function App() {
           setDropTarget(null);
         }}
       >
-        <span className="drag-handle" title="拖曳移動到群組" aria-hidden="true">
+        <span className="drag-handle" title={t.dragToGroup} aria-hidden="true">
           ⠿
         </span>
         <div className="cmd-main">
@@ -914,8 +1302,8 @@ export default function App() {
             type="button"
             className={`icon-btn${isCopied ? " icon-btn--copied" : ""}`}
             onClick={() => handleCopy(item)}
-            title={isCopied ? "已複製" : "複製指令"}
-            aria-label={isCopied ? "已複製" : "複製指令"}
+            title={isCopied ? t.copied : t.copy}
+            aria-label={isCopied ? t.copied : t.copy}
           >
             {isCopied ? <CheckIcon /> : <CopyIcon />}
           </button>
@@ -923,8 +1311,8 @@ export default function App() {
             type="button"
             className="icon-btn"
             onClick={() => openEditCmdForm(item)}
-            title="修改指令"
-            aria-label="修改指令"
+            title={t.editCommand}
+            aria-label={t.editCommand}
           >
             <EditIcon />
           </button>
@@ -932,8 +1320,8 @@ export default function App() {
             type="button"
             className="icon-btn icon-btn--danger"
             onClick={() => setConfirmDialog({ kind: "command", item })}
-            title="刪除指令"
-            aria-label="刪除指令"
+            title={t.deleteCommand}
+            aria-label={t.deleteCommand}
           >
             <TrashIcon />
           </button>
@@ -961,7 +1349,7 @@ export default function App() {
           type="button"
           className="group-collapse"
           onClick={onToggle}
-          aria-label={expanded ? "收合群組" : "展開群組"}
+          aria-label={expanded ? t.collapseGroup : t.expandGroup}
         >
           {expanded ? "▾" : "▸"}
         </button>
@@ -972,7 +1360,7 @@ export default function App() {
       {expanded && (
         <div className="group-items">
           {sectionItems.length === 0 ? (
-            <div className="group-empty">拖曳指令卡片到這裡</div>
+            <div className="group-empty">{t.dropHere}</div>
           ) : (
             sectionItems.map(renderCard)
           )}
@@ -985,13 +1373,60 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            &gt;_
-          </div>
+          <img className="brand-logo" src={appIcon} alt="" aria-hidden="true" />
           <div>
-            <h1>Command Pocket</h1>
-            <p>常用指令收納，一鍵複製</p>
+            <p>{t.tagline}</p>
           </div>
+        </div>
+        <div className="menu-wrap">
+          <button
+            type="button"
+            className={`icon-btn${menuOpen ? " is-active" : ""}`}
+            onClick={() => setMenuOpen((prev) => !prev)}
+            title={t.settings}
+            aria-label={t.openSettings}
+          >
+            <MenuIcon />
+          </button>
+          {menuOpen && (
+            <div className="menu-popover" role="menu">
+              <button
+                type="button"
+                className="menu-item"
+                role="menuitemcheckbox"
+                aria-checked={alwaysOnTop}
+                onClick={toggleAlwaysOnTop}
+              >
+                <span>{t.pinWindow}</span>
+                <span
+                  className={`menu-switch${alwaysOnTop ? " is-on" : ""}`}
+                  aria-hidden="true"
+                />
+              </button>
+              <button
+                type="button"
+                className="menu-item"
+                role="menuitem"
+                onClick={toggleTheme}
+              >
+                <span>{t.theme}</span>
+                <span className="menu-item-value">
+                  {theme === "dark" ? t.dark : t.light}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="menu-item"
+                role="menuitem"
+                onClick={toggleLang}
+              >
+                <span>{t.language}</span>
+                <span className="menu-item-value">
+                  {lang === "zh-TW" ? t.langZH : t.langEN}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -1013,10 +1448,10 @@ export default function App() {
           ref={categorySearchRef}
           type="search"
           className="search-input"
-          placeholder="搜尋分類"
+          placeholder={t.searchCategory}
           value={categoryQuery}
           onChange={(e) => setCategoryQuery(e.target.value)}
-          aria-label="搜尋分類"
+          aria-label={t.searchCategory}
         />
       </div>
 
@@ -1025,60 +1460,57 @@ export default function App() {
           type="button"
           className={`action-btn${catPanel === "add" ? " is-active" : ""}`}
           onClick={() => toggleCatPanel("add")}
-          title="新增分類"
-          aria-label="新增分類"
+          title={t.addCategory}
+          aria-label={t.addCategory}
         >
           <PlusIcon />
-          <span>分類</span>
+          <span>{t.category}</span>
         </button>
         <button
           type="button"
           className={`action-btn${catPanel === "edit" ? " is-active" : ""}`}
           disabled={categories.length === 0}
           onClick={() => toggleCatPanel("edit")}
-          title="管理所有分類（改名、鎖定、刪除）"
-          aria-label="管理所有分類"
+          title={t.manageCategories}
+          aria-label={t.manageCategoriesShort}
         >
           <EditIcon />
-          <span>編輯</span>
+          <span>{t.edit}</span>
         </button>
       </div>
 
       {catPanel === "add" && (
         <div className="panel">
           <div className="panel-head">
-            <div className="panel-title">新增分類</div>
+            <div className="panel-title">{t.addCategory}</div>
             <button
               type="button"
               className="icon-btn"
               onClick={closeForms}
-              title="取消"
-              aria-label="取消新增分類"
+              title={t.cancel}
+              aria-label={`${t.cancel}${t.addCategory}`}
             >
               <CloseIcon />
             </button>
           </div>
-          <form onSubmit={handleAddCategory} className="form-row">
+          <form onSubmit={handleAddCategory} className="form-stack">
             <input
               ref={categoryRef}
               type="text"
               className="field"
-              placeholder="例如：docker、sql、linux"
+              placeholder={t.categoryPlaceholder}
               value={newCatName}
               onChange={(e) => {
                 setNewCatName(e.target.value);
                 setCatError("");
               }}
-              aria-label="分類名稱"
+              aria-label={t.categoryName}
             />
-            <button
-              type="submit"
-              className="btn btn--primary"
-              title="加入分類"
-              aria-label="加入分類"
-            >
-              <CheckIcon />
-            </button>
+            <div className="form-actions">
+              <button type="submit" className="btn btn--primary">
+                {t.save}
+              </button>
+            </div>
           </form>
           {catError && <div className="form-error">{catError}</div>}
         </div>
@@ -1087,13 +1519,13 @@ export default function App() {
       {catPanel === "edit" && (
         <div className="panel">
           <div className="panel-head">
-            <div className="panel-title">管理分類（鎖定後無法刪除）</div>
+            <div className="panel-title">{t.manageCategoryTitle}</div>
             <button
               type="button"
               className="icon-btn"
               onClick={closeForms}
-              title="完成"
-              aria-label="完成分類管理"
+              title={t.done}
+              aria-label={`${t.done}${t.manageCategoriesShort}`}
             >
               <CloseIcon />
             </button>
@@ -1103,7 +1535,26 @@ export default function App() {
             {categories.map((cat) => {
               const isRenaming = editingCategory === cat.name;
               return (
-                <div className="manage-row" key={cat.name}>
+                <div
+                  key={cat.name}
+                  className={`manage-row${draggingCat === cat.name ? " is-dragging" : ""}${dropCat === cat.name && draggingCat !== cat.name ? " drop-active" : ""}`}
+                  onDragOver={(e) => handleCatDragOver(e, cat.name)}
+                  onDragLeave={handleCatDragLeave}
+                  onDrop={(e) => handleCatDrop(e, cat.name)}
+                >
+                  <span
+                    className="drag-handle manage-drag"
+                    draggable
+                    onDragStart={(e) => handleCatDragStart(e, cat.name)}
+                    onDragEnd={() => {
+                      setDraggingCat(null);
+                      setDropCat(null);
+                    }}
+                    title={t.dragSort}
+                    aria-label={fmt(t.dragSortItem, { name: cat.name })}
+                  >
+                    ⠿
+                  </span>
                   {isRenaming ? (
                     <form onSubmit={handleRenameCategory} className="manage-row-form">
                       <input
@@ -1122,13 +1573,13 @@ export default function App() {
                             setEditCatName("");
                           }
                         }}
-                        aria-label={`重新命名 ${cat.name}`}
+                        aria-label={fmt(t.renameItem, { name: cat.name })}
                       />
                       <button
                         type="submit"
                         className="icon-btn"
-                        title="儲存名稱"
-                        aria-label="儲存名稱"
+                        title={t.saveName}
+                        aria-label={t.saveName}
                       >
                         <CheckIcon />
                       </button>
@@ -1140,8 +1591,8 @@ export default function App() {
                           setEditCatName("");
                           setCatError("");
                         }}
-                        title="取消改名"
-                        aria-label="取消改名"
+                        title={t.cancelRename}
+                        aria-label={t.cancelRename}
                       >
                         <CloseIcon />
                       </button>
@@ -1150,14 +1601,14 @@ export default function App() {
                     <>
                       <span className="manage-name">{cat.name}</span>
                       <span className="tab-count">
-                        {categoryCounts.get(cat.name) ?? 0} 筆
+                        {fmt(t.itemsUnit, { count: categoryCounts.get(cat.name) ?? 0 })}
                       </span>
                       <button
                         type="button"
                         className="icon-btn"
                         onClick={() => startRenameCategory(cat.name)}
-                        title="重新命名分類"
-                        aria-label={`重新命名 ${cat.name}`}
+                        title={t.renameCategory}
+                        aria-label={fmt(t.renameItem, { name: cat.name })}
                       >
                         <EditIcon />
                       </button>
@@ -1165,8 +1616,12 @@ export default function App() {
                         type="button"
                         className={`icon-btn${cat.locked ? " is-locked" : ""}`}
                         onClick={() => toggleCategoryLock(cat.name)}
-                        title={cat.locked ? "解鎖分類" : "鎖定分類"}
-                        aria-label={cat.locked ? `解鎖 ${cat.name}` : `鎖定 ${cat.name}`}
+                        title={cat.locked ? t.unlockCategory : t.lockCategory}
+                        aria-label={
+                          cat.locked
+                            ? fmt(t.unlockItem, { name: cat.name })
+                            : fmt(t.lockItem, { name: cat.name })
+                        }
                       >
                         <LockIcon locked={cat.locked} />
                       </button>
@@ -1175,8 +1630,8 @@ export default function App() {
                         className="icon-btn icon-btn--danger"
                         disabled={cat.locked}
                         onClick={() => requestDeleteCategory(cat.name)}
-                        title={cat.locked ? "請先解鎖再刪除" : "刪除分類"}
-                        aria-label={`刪除分類 ${cat.name}`}
+                        title={cat.locked ? t.unlockBeforeDelete : t.deleteCategory}
+                        aria-label={fmt(t.deleteCategoryItem, { name: cat.name })}
                       >
                         <TrashIcon />
                       </button>
@@ -1195,14 +1650,14 @@ export default function App() {
           className="tab-scroll"
           onClick={() => scrollTabs(-1)}
           disabled={!scrollState.left}
-          aria-label="向左捲動分類"
+          aria-label={t.scrollLeft}
         >
           ‹
         </button>
         <nav
           className="tabs"
           ref={tabsRef}
-          aria-label="指令分類"
+          aria-label={t.categoriesNav}
           onScroll={updateTabScroll}
         >
           {visibleCategories.map((cat) => {
@@ -1217,12 +1672,12 @@ export default function App() {
                   closeForms();
                 }}
               >
-                <span>{cat.name}</span>
                 {cat.locked && (
-                  <span className="tab-lock" title="已鎖定">
+                  <span className="tab-lock" title={t.locked}>
                     <LockIcon locked />
                   </span>
                 )}
+                <span>{cat.name}</span>
                 <span className="tab-count">
                   {categoryCounts.get(cat.name) ?? 0}
                 </span>
@@ -1230,7 +1685,7 @@ export default function App() {
             );
           })}
           {normalizedCategoryQuery && visibleCategories.length === 0 && (
-            <span className="tabs-empty">找不到符合的分類</span>
+            <span className="tabs-empty">{t.noCategoryMatch}</span>
           )}
         </nav>
         <button
@@ -1238,7 +1693,7 @@ export default function App() {
           className="tab-scroll"
           onClick={() => scrollTabs(1)}
           disabled={!scrollState.right}
-          aria-label="向右捲動分類"
+          aria-label={t.scrollRight}
         >
           ›
         </button>
@@ -1263,10 +1718,10 @@ export default function App() {
           ref={searchRef}
           type="search"
           className="search-input"
-          placeholder="搜尋目前分類的指令說明或內容"
+          placeholder={t.searchCommands}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          aria-label="搜尋指令"
+          aria-label={t.searchCommands}
         />
         <div className="search-hint" aria-hidden="true">
           <kbd>Ctrl</kbd>
@@ -1280,10 +1735,10 @@ export default function App() {
           className={`action-btn${cmdForm ? " is-active" : ""}`}
           onClick={openAddCmdForm}
           disabled={!activeTab}
-          title="新增指令"
+          title={t.addCommand}
         >
           <PlusIcon />
-          <span>指令</span>
+          <span>{t.command}</span>
         </button>
         <button
           type="button"
@@ -1295,37 +1750,45 @@ export default function App() {
             setCmdForm(null);
             setGroupError("");
           }}
-          title="新增群組"
+          title={t.addGroup}
         >
           <PlusIcon />
-          <span>群組</span>
+          <span>{t.group}</span>
         </button>
       </div>
 
       {showGroupAdd && (
         <div className="panel">
           <div className="panel-head">
-            <div className="panel-title">在「{activeTab}」新增群組</div>
-            <button type="button" className="btn btn--sm btn--ghost" onClick={closeForms}>
-              取消
+            <div className="panel-title">{fmt(t.addGroupIn, { name: activeTab })}</div>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={closeForms}
+              title={t.cancel}
+              aria-label={`${t.cancel}${t.addGroup}`}
+            >
+              <CloseIcon />
             </button>
           </div>
-          <form onSubmit={handleAddGroup} className="form-row">
+          <form onSubmit={handleAddGroup} className="form-stack">
             <input
               ref={groupRef}
               type="text"
               className="field"
-              placeholder="例如：部署流程、常用查詢"
+              placeholder={t.groupPlaceholder}
               value={groupNameInput}
               onChange={(e) => {
                 setGroupNameInput(e.target.value);
                 setGroupError("");
               }}
-              aria-label="群組名稱"
+              aria-label={t.groupName}
             />
-            <button type="submit" className="btn btn--primary">
-              加入
-            </button>
+            <div className="form-actions">
+              <button type="submit" className="btn btn--primary">
+                {t.add}
+              </button>
+            </div>
           </form>
           {groupError && <div className="form-error">{groupError}</div>}
         </div>
@@ -1335,36 +1798,42 @@ export default function App() {
         <form onSubmit={handleSaveCmd} className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              {cmdForm.mode === "add" ? "新增指令" : "修改指令"}
+              {cmdForm.mode === "add" ? t.addCommand : t.editCommand}
             </div>
-            <button type="button" className="btn btn--sm btn--ghost" onClick={closeForms}>
-              取消
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={closeForms}
+              title={t.cancel}
+              aria-label={t.cancel}
+            >
+              <CloseIcon />
             </button>
           </div>
           <input
             ref={titleRef}
             type="text"
             className="field"
-            placeholder="指令說明，例如：查看目前分支狀態"
+            placeholder={t.commandTitlePlaceholder}
             value={titleInput}
             onChange={(e) => setTitleInput(e.target.value)}
-            aria-label="指令說明"
+            aria-label={t.commandTitle}
           />
           <input
             type="text"
             className="field field--mono"
-            placeholder="指令內容，例如：git status"
+            placeholder={t.commandContentPlaceholder}
             value={commandInput}
             onChange={(e) => setCommandInput(e.target.value)}
-            aria-label="指令內容"
+            aria-label={t.commandContent}
           />
           <select
             className="field"
             value={groupSelect}
             onChange={(e) => setGroupSelect(e.target.value)}
-            aria-label="所屬群組"
+            aria-label={t.groupOf}
           >
-            <option value={UNGROUPED_KEY}>未分組</option>
+            <option value={UNGROUPED_KEY}>{t.ungrouped}</option>
             {groupsForActive.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.name}
@@ -1373,7 +1842,7 @@ export default function App() {
           </select>
           <div className="form-actions">
             <button type="submit" className="btn btn--primary">
-              儲存
+              {t.save}
             </button>
           </div>
         </form>
@@ -1392,7 +1861,7 @@ export default function App() {
           <>
             {renderSection(
               UNGROUPED_KEY,
-              "未分組",
+              t.ungrouped,
               ungroupedItems,
               normalizedSearch ? true : !ungroupedCollapsed,
               () => setUngroupedCollapsed((prev) => !prev),
@@ -1427,14 +1896,14 @@ export default function App() {
                           setRenamingGroupId(null);
                         }
                       }}
-                      aria-label="群組新名稱"
+                      aria-label={t.groupNewName}
                     />
                     <button
                       type="button"
                       className="icon-btn"
                       onClick={saveRenameGroup}
-                      title="儲存名稱"
-                      aria-label="儲存名稱"
+                      title={t.saveName}
+                      aria-label={t.saveName}
                     >
                       <CheckIcon />
                     </button>
@@ -1442,8 +1911,8 @@ export default function App() {
                       type="button"
                       className="icon-btn"
                       onClick={() => setRenamingGroupId(null)}
-                      title="取消改名"
-                      aria-label="取消改名"
+                      title={t.cancelRename}
+                      aria-label={t.cancelRename}
                     >
                       <CloseIcon />
                     </button>
@@ -1454,8 +1923,8 @@ export default function App() {
                       type="button"
                       className="icon-btn"
                       onClick={() => startRenameGroup(group)}
-                      title="重新命名群組"
-                      aria-label={`重新命名 ${group.name}`}
+                      title={t.renameGroup}
+                      aria-label={fmt(t.renameItem, { name: group.name })}
                     >
                       <EditIcon />
                     </button>
@@ -1463,8 +1932,8 @@ export default function App() {
                       type="button"
                       className="icon-btn icon-btn--danger"
                       onClick={() => requestDeleteGroup(group)}
-                      title="刪除群組"
-                      aria-label={`刪除群組 ${group.name}`}
+                      title={t.deleteGroup}
+                      aria-label={fmt(t.deleteGroupItem, { name: group.name })}
                     >
                       <TrashIcon />
                     </button>
@@ -1478,10 +1947,14 @@ export default function App() {
 
       <footer className="statusbar">
         <span>
-          {categories.length} 個分類 · {groupsForActive.length} 個群組 · 顯示{" "}
-          {activeCategoryItems.length} / {items.length} 筆指令
+          {fmt(t.statusSummary, {
+            categories: categories.length,
+            groups: groupsForActive.length,
+            shown: activeCategoryItems.length,
+            total: items.length,
+          })}
         </span>
-        <span>Ctrl + K 搜尋</span>
+        <span>{t.searchShortcut}</span>
       </footer>
 
       {toast && (
@@ -1513,7 +1986,7 @@ export default function App() {
                 className="btn"
                 onClick={() => setConfirmDialog(null)}
               >
-                取消
+                {t.cancel}
               </button>
               <button
                 ref={confirmRef}
@@ -1521,7 +1994,7 @@ export default function App() {
                 className="btn btn--danger-solid"
                 onClick={handleConfirmDelete}
               >
-                確認刪除
+                {t.confirmDelete}
               </button>
             </div>
           </div>
