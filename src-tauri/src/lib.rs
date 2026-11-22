@@ -5,6 +5,24 @@ fn greet(name: &str) -> String {
 }
 
 #[cfg(windows)]
+fn grant_webview2_permissions(path: &std::path::Path) {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    for sid in ["*S-1-15-2-2", "*S-1-15-2-1"] {
+        let _ = Command::new("icacls")
+            .arg(path)
+            .arg("/grant")
+            .arg(format!("{sid}:(OI)(CI)(RX)"))
+            .arg("/C")
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    }
+}
+
+#[cfg(windows)]
 fn setup_portable_webview2() {
     use std::env;
 
@@ -21,6 +39,7 @@ fn setup_portable_webview2() {
 
     let runtime_dir = exe_dir.join("WebView2Runtime");
     if runtime_dir.join("msedgewebview2.exe").is_file() {
+        grant_webview2_permissions(&runtime_dir);
         unsafe {
             env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", runtime_dir);
         }

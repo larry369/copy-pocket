@@ -10,8 +10,18 @@ $runtimeDest = Join-Path $appDir "WebView2Runtime"
 $dataDir = Join-Path $appDir "app-data"
 $zipPath = Join-Path $outRoot "CommandPocket-portable-win-x64.zip"
 
+if (Test-Path -LiteralPath $runtimeSource) {
+    $foundExe = Get-ChildItem -LiteralPath $runtimeSource -Recurse -Filter "msedgewebview2.exe" -File | Select-Object -First 1
+    if ($foundExe -and $foundExe.DirectoryName -ne $runtimeSource) {
+        Move-Item -Path (Join-Path $foundExe.DirectoryName "*") -Destination $runtimeSource -Force
+        Get-ChildItem -LiteralPath $runtimeSource -Recurse -Directory |
+            Where-Object { -not (Get-ChildItem -LiteralPath $_.FullName -Force) } |
+            Remove-Item -Force
+    }
+}
+
 if (-not (Test-Path -LiteralPath $runtimeExe)) {
-    throw "WebView2Runtime not found. Extract the fixed runtime to src-tauri\WebView2Runtime so msedgewebview2.exe is directly inside."
+    throw "WebView2Runtime not found. Extract the fixed runtime .cab into src-tauri\WebView2Runtime first."
 }
 
 Push-Location -LiteralPath $root
