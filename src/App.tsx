@@ -7,16 +7,29 @@ interface CategoryItem {
   locked: boolean;
 }
 
+interface GroupItem {
+  id: string;
+  category: Category;
+  name: string;
+  collapsed: boolean;
+}
+
 interface CommandItem {
   id: string;
   category: Category;
   title: string;
   command: string;
+  groupId?: string;
 }
+
+type CmdForm = { mode: "add" } | { mode: "edit"; item: CommandItem };
 
 type ConfirmTarget =
   | { kind: "category"; name: Category }
+  | { kind: "group"; id: string; name: string; count: number }
   | { kind: "command"; item: CommandItem };
+
+const UNGROUPED_KEY = "__ungrouped__";
 
 const DEFAULT_CATEGORIES: Category[] = [
   "git",
@@ -27,9 +40,11 @@ const DEFAULT_CATEGORIES: Category[] = [
   "npm",
 ];
 
-const STORAGE_ITEMS_KEY = "command_pocket_items_v2";
+const STORAGE_ITEMS_KEY = "command_pocket_items_v3";
+const LEGACY_ITEMS_KEY = "command_pocket_items_v2";
 const STORAGE_CATS_KEY = "command_pocket_categories_v3";
 const LEGACY_CATS_KEY = "command_pocket_categories_v2";
+const STORAGE_GROUPS_KEY = "command_pocket_groups_v1";
 
 const DEFAULT_COMMANDS: CommandItem[] = [
   {
@@ -106,9 +121,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
   },
 ];
 
-function parseCategories(raw: string | null): CategoryItem[] {
-  if (!raw) return [];
-
+function parseCategories(raw: string): CategoryItem[] {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -145,10 +158,10 @@ function parseCategories(raw: string | null): CategoryItem[] {
 
 function loadCategories(): CategoryItem[] {
   try {
-    const current = parseCategories(localStorage.getItem(STORAGE_CATS_KEY));
-    const legacy = parseCategories(localStorage.getItem(LEGACY_CATS_KEY));
-    const saved = current.length > 0 ? current : legacy;
-    if (saved.length > 0) return saved;
+    const current = localStorage.getItem(STORAGE_CATS_KEY);
+    if (current !== null) return parseCategories(current);
+    const legacy = localStorage.getItem(LEGACY_CATS_KEY);
+    if (legacy !== null) return parseCategories(legacy);
   } catch {
     return DEFAULT_CATEGORIES.map((name) => ({ name, locked: false }));
   }
@@ -157,10 +170,27 @@ function loadCategories(): CategoryItem[] {
 
 function loadItems(): CommandItem[] {
   try {
-    const saved = localStorage.getItem(STORAGE_ITEMS_KEY);
-    if (saved) {
-      const parsed: unknown = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed as CommandItem[];
+    for (const key of [STORAGE_ITEMS_KEY, LEGACY_ITEMS_KEY]) {
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) continue;
+
+      return parsed
+        .filter((entry): entry is CommandItem => {
+          if (!entry || typeof entry !== "object") return false;
+          const candidate = entry as Partial<CommandItem>;
+          return (
+            typeof candidate.id === "string" &&
+            typeof candidate.category === "string" &&
+            typeof candidate.title === "string" &&
+            typeof candidate.command === "string"
+          );
+        })
+        .map((entry) => ({
+          ...entry,
+          groupId: typeof entry.groupId === "string" ? entry.groupId : undefined,
+        }));
     }
   } catch {
     return DEFAULT_COMMANDS;
@@ -168,11 +198,43 @@ function loadItems(): CommandItem[] {
   return DEFAULT_COMMANDS;
 }
 
-function LockIcon({ locked }: { locked: boolean }) {
+function loadGroups(): GroupItem[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_GROUPS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    const result: GroupItem[] = [];
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== "object") continue;
+      const candidate = entry as Partial<GroupItem>;
+      if (
+        typeof candidate.id !== "string" ||
+        typeof candidate.category !== "string" ||
+        typeof candidate.name !== "string" ||
+        !candidate.name.trim()
+      ) {
+        continue;
+      }
+      result.push({
+        id: candidate.id,
+        category: candidate.category,
+        name: candidate.name,
+        collapsed: candidate.collapsed === true,
+      });
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+function Icon({ children }: { children: React.ReactNode }) {
   return (
     <svg
-      width="13"
-      height="13"
+      width="15"
+      height="15"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -181,40 +243,114 @@ function LockIcon({ locked }: { locked: boolean }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
+      {children}
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <Icon>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </Icon>
+  );
+}
+
+function EditIcon() {
+  return (
+    <Icon>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </Icon>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <Icon>
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5M14 11v5" />
+    </Icon>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <Icon>
+      <path d="m5 13 4 4L19 7" />
+    </Icon>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <Icon>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </Icon>
+  );
+}
+
+function ManageIcon() {
+  return (
+    <Icon>
+      <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+      <circle cx="15" cy="7" r="2" />
+      <circle cx="9" cy="17" r="2" />
+    </Icon>
+  );
+}
+
+function LockIcon({ locked }: { locked: boolean }) {
+  return (
+    <Icon>
       <rect x="4" y="10" width="16" height="11" rx="2" />
       {locked ? (
         <path d="M8 10V7a4 4 0 0 1 8 0v3" />
       ) : (
         <path d="M8 10V7a4 4 0 0 1 7.5-2" />
       )}
-    </svg>
+    </Icon>
   );
 }
 
 export default function App() {
   const [categories, setCategories] = useState<CategoryItem[]>(loadCategories);
   const [items, setItems] = useState<CommandItem[]>(loadItems);
+  const [groups, setGroups] = useState<GroupItem[]>(loadGroups);
   const [activeTab, setActiveTab] = useState<Category>(() => {
     return categories[0]?.name ?? "";
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [showCatForm, setShowCatForm] = useState(false);
+  const [showCatAdd, setShowCatAdd] = useState(false);
+  const [showCatManage, setShowCatManage] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [catError, setCatError] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showGroupAdd, setShowGroupAdd] = useState(false);
+  const [groupNameInput, setGroupNameInput] = useState("");
+  const [groupError, setGroupError] = useState("");
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState("");
+  const [ungroupedCollapsed, setUngroupedCollapsed] = useState(false);
+  const [cmdForm, setCmdForm] = useState<CmdForm | null>(null);
   const [titleInput, setTitleInput] = useState("");
   const [commandInput, setCommandInput] = useState("");
-  const [showCmdForm, setShowCmdForm] = useState(false);
+  const [groupSelect, setGroupSelect] = useState(UNGROUPED_KEY);
   const [categoryQuery, setCategoryQuery] = useState("");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState("");
-  const [scrollState, setScrollState] = useState({ left: false, right: false });
   const [confirmDialog, setConfirmDialog] = useState<ConfirmTarget | null>(null);
+  const [scrollState, setScrollState] = useState({ left: false, right: false });
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement | null>(null);
   const categorySearchRef = useRef<HTMLInputElement | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const categoryRef = useRef<HTMLInputElement | null>(null);
+  const groupRef = useRef<HTMLInputElement | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   const tabsRef = useRef<HTMLElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,12 +373,20 @@ export default function App() {
   }, [items]);
 
   useEffect(() => {
-    if (showCatForm) categoryRef.current?.focus();
-  }, [showCatForm]);
+    localStorage.setItem(STORAGE_GROUPS_KEY, JSON.stringify(groups));
+  }, [groups]);
 
   useEffect(() => {
-    if (showCmdForm) titleRef.current?.focus();
-  }, [showCmdForm]);
+    if (showCatAdd) categoryRef.current?.focus();
+  }, [showCatAdd]);
+
+  useEffect(() => {
+    if (showGroupAdd) groupRef.current?.focus();
+  }, [showGroupAdd]);
+
+  useEffect(() => {
+    if (cmdForm) titleRef.current?.focus();
+  }, [cmdForm]);
 
   useEffect(() => {
     if (confirmDialog) confirmRef.current?.focus();
@@ -292,7 +436,9 @@ export default function App() {
       if (e.key === "Escape") {
         if (confirmDialog) {
           setConfirmDialog(null);
-        } else if (showCatForm || showCmdForm) {
+        } else if (renamingGroupId) {
+          setRenamingGroupId(null);
+        } else if (showCatAdd || showCatManage || showGroupAdd || cmdForm) {
           closeForms();
         } else if (document.activeElement === searchRef.current) {
           setSearch("");
@@ -313,7 +459,14 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [confirmDialog, showCatForm, showCmdForm]);
+  }, [
+    confirmDialog,
+    renamingGroupId,
+    showCatAdd,
+    showCatManage,
+    showGroupAdd,
+    cmdForm,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -330,43 +483,48 @@ export default function App() {
     }, 1800);
   };
 
-  const normalizedCategoryQuery = categoryQuery.trim().toLowerCase();
-  const visibleCategories = categories.filter((cat) =>
-    cat.name.toLowerCase().includes(normalizedCategoryQuery),
-  );
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredItems = items.filter(
-    (item) =>
-      item.category === activeTab &&
-      (!normalizedSearch ||
-        item.title.toLowerCase().includes(normalizedSearch) ||
-        item.command.toLowerCase().includes(normalizedSearch)),
-  );
-
-  const categoryCounts = new Map<Category, number>();
-  for (const item of items) {
-    categoryCounts.set(item.category, (categoryCounts.get(item.category) ?? 0) + 1);
-  }
-
   const closeForms = () => {
-    setShowCatForm(false);
-    setShowCmdForm(false);
+    setShowCatAdd(false);
+    setShowCatManage(false);
+    setShowGroupAdd(false);
+    setCmdForm(null);
     setCatError("");
+    setGroupError("");
+    setRenamingGroupId(null);
   };
 
   const scrollTabs = (direction: -1 | 1) => {
     tabsRef.current?.scrollBy({ left: direction * 180, behavior: "smooth" });
   };
 
+  const normalizedCategoryQuery = categoryQuery.trim().toLowerCase();
+  const visibleCategories = categories.filter((cat) =>
+    cat.name.toLowerCase().includes(normalizedCategoryQuery),
+  );
+  const normalizedSearch = search.trim().toLowerCase();
+  const categoryCounts = new Map<Category, number>();
+  for (const item of items) {
+    categoryCounts.set(item.category, (categoryCounts.get(item.category) ?? 0) + 1);
+  }
+
+  const groupsForActive = groups.filter((group) => group.category === activeTab);
+  const activeCategoryItems = items.filter(
+    (item) =>
+      item.category === activeTab &&
+      (!normalizedSearch ||
+        item.title.toLowerCase().includes(normalizedSearch) ||
+        item.command.toLowerCase().includes(normalizedSearch)),
+  );
+  const ungroupedItems = activeCategoryItems.filter((item) => !item.groupId);
+
   const handleAddCategory = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newCatName.trim();
     if (!trimmed) return;
 
-    const exists = categories.some(
-      (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
-    );
-    if (exists) {
+    if (
+      categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())
+    ) {
       setCatError("這個分類已經存在了");
       return;
     }
@@ -375,6 +533,8 @@ export default function App() {
     setActiveTab(trimmed);
     setNewCatName("");
     setCatError("");
+    setShowCatAdd(false);
+    showToast("分類已新增");
   };
 
   const toggleCategoryLock = (name: Category) => {
@@ -395,6 +555,89 @@ export default function App() {
     setConfirmDialog({ kind: "category", name });
   };
 
+  const handleAddGroup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = groupNameInput.trim();
+    if (!trimmed || !activeTab) return;
+
+    if (
+      groups.some(
+        (g) =>
+          g.category === activeTab &&
+          g.name.toLowerCase() === trimmed.toLowerCase(),
+      )
+    ) {
+      setGroupError("這個群組已經存在了");
+      return;
+    }
+
+    setGroups((prev) => [
+      ...prev,
+      {
+        id: `group-${Date.now()}`,
+        category: activeTab,
+        name: trimmed,
+        collapsed: false,
+      },
+    ]);
+    setGroupNameInput("");
+    setGroupError("");
+    setShowGroupAdd(false);
+    showToast("群組已新增");
+  };
+
+  const startRenameGroup = (group: GroupItem) => {
+    setRenamingGroupId(group.id);
+    setRenameInput(group.name);
+  };
+
+  const saveRenameGroup = () => {
+    const target = groups.find((g) => g.id === renamingGroupId);
+    if (!target) {
+      setRenamingGroupId(null);
+      return;
+    }
+
+    const trimmed = renameInput.trim();
+    if (!trimmed) {
+      setRenamingGroupId(null);
+      return;
+    }
+
+    if (
+      groups.some(
+        (g) =>
+          g.id !== target.id &&
+          g.category === target.category &&
+          g.name.toLowerCase() === trimmed.toLowerCase(),
+      )
+    ) {
+      showToast("這個群組已經存在了");
+      return;
+    }
+
+    setGroups((prev) =>
+      prev.map((g) => (g.id === target.id ? { ...g, name: trimmed } : g)),
+    );
+    setRenamingGroupId(null);
+    showToast("群組已重新命名");
+  };
+
+  const toggleGroupCollapse = (id: string) => {
+    setGroups((prev) =>
+      prev.map((g) => (g.id === id ? { ...g, collapsed: !g.collapsed } : g)),
+    );
+  };
+
+  const requestDeleteGroup = (group: GroupItem) => {
+    setConfirmDialog({
+      kind: "group",
+      id: group.id,
+      name: group.name,
+      count: items.filter((item) => item.groupId === group.id).length,
+    });
+  };
+
   const handleConfirmDelete = () => {
     if (!confirmDialog) return;
 
@@ -403,11 +646,22 @@ export default function App() {
       const remaining = categories.filter((c) => c.name !== name);
       setCategories(remaining);
       setItems((prev) => prev.filter((item) => item.category !== name));
+      setGroups((prev) => prev.filter((g) => g.category !== name));
       if (activeTab === name) setActiveTab(remaining[0]?.name ?? "");
       if (copiedId && items.find((item) => item.id === copiedId)?.category === name) {
         setCopiedId(null);
       }
-      showToast("分類與所屬指令已刪除");
+      showToast("分類、群組與所屬指令已刪除");
+    } else if (confirmDialog.kind === "group") {
+      const { id } = confirmDialog;
+      setGroups((prev) => prev.filter((g) => g.id !== id));
+      setItems((prev) =>
+        prev.map((item) =>
+          item.groupId === id ? { ...item, groupId: undefined } : item,
+        ),
+      );
+      if (groupSelect === id) setGroupSelect(UNGROUPED_KEY);
+      showToast("群組已刪除，指令已回到未分組");
     } else {
       const { item } = confirmDialog;
       setItems((prev) => prev.filter((entry) => entry.id !== item.id));
@@ -432,34 +686,43 @@ export default function App() {
   };
 
   const openAddCmdForm = () => {
-    setEditingId(null);
     setTitleInput("");
     setCommandInput("");
-    setShowCmdForm(true);
-    setShowCatForm(false);
+    setGroupSelect(UNGROUPED_KEY);
+    setCmdForm({ mode: "add" });
+    setShowCatAdd(false);
+    setShowCatManage(false);
+    setShowGroupAdd(false);
     setCatError("");
+    setGroupError("");
   };
 
   const openEditCmdForm = (item: CommandItem) => {
-    setEditingId(item.id);
     setTitleInput(item.title);
     setCommandInput(item.command);
-    setShowCmdForm(true);
-    setShowCatForm(false);
+    setGroupSelect(item.groupId ?? UNGROUPED_KEY);
+    setCmdForm({ mode: "edit", item });
+    setShowCatAdd(false);
+    setShowCatManage(false);
+    setShowGroupAdd(false);
     setCatError("");
+    setGroupError("");
   };
 
   const handleSaveCmd = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedTitle = titleInput.trim();
     const trimmedCommand = commandInput.trim();
-    if (!trimmedTitle || !trimmedCommand || !activeTab) return;
+    if (!trimmedTitle || !trimmedCommand || !activeTab || !cmdForm) return;
 
-    if (editingId) {
+    const groupId = groupSelect === UNGROUPED_KEY ? undefined : groupSelect;
+
+    if (cmdForm.mode === "edit") {
+      const id = cmdForm.item.id;
       setItems((prev) =>
         prev.map((item) =>
-          item.id === editingId
-            ? { ...item, title: trimmedTitle, command: trimmedCommand }
+          item.id === id
+            ? { ...item, title: trimmedTitle, command: trimmedCommand, groupId }
             : item,
         ),
       );
@@ -470,25 +733,63 @@ export default function App() {
         category: activeTab,
         title: trimmedTitle,
         command: trimmedCommand,
+        groupId,
       };
       setItems((prev) => [...prev, newItem]);
       showToast("指令已新增");
     }
 
-    setShowCmdForm(false);
-    setEditingId(null);
+    setCmdForm(null);
     setTitleInput("");
     setCommandInput("");
+    setGroupSelect(UNGROUPED_KEY);
+  };
+
+  const handleDragStart = (e: React.DragEvent<HTMLElement>, id: string) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+    setDraggingId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLElement>, target: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropTarget(target);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setDropTarget(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLElement>, target: string) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain") || draggingId;
+    if (!id) return;
+
+    const groupId = target === UNGROUPED_KEY ? undefined : target;
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, groupId } : item)),
+    );
+    const groupName = groups.find((g) => g.id === groupId)?.name;
+    showToast(groupId ? `已移動到「${groupName ?? "群組"}」` : "已移至未分組");
+    setDraggingId(null);
+    setDropTarget(null);
   };
 
   const confirmTitle =
     confirmDialog?.kind === "category"
       ? `刪除分類「${confirmDialog.name}」？`
-      : "刪除這筆指令？";
+      : confirmDialog?.kind === "group"
+        ? `刪除群組「${confirmDialog.name}」？`
+        : "刪除這筆指令？";
   const confirmText =
     confirmDialog?.kind === "category"
-      ? `分類內的 ${categoryCounts.get(confirmDialog.name) ?? 0} 筆指令會一併刪除，此動作無法復原。`
-      : `「${confirmDialog?.kind === "command" ? confirmDialog.item.title : ""}」將被刪除，此動作無法復原。`;
+      ? `分類內的 ${categoryCounts.get(confirmDialog.name) ?? 0} 筆指令與 ${groups.filter((g) => g.category === confirmDialog.name).length} 個群組會一併刪除，此動作無法復原。`
+      : confirmDialog?.kind === "group"
+        ? `群組內的 ${confirmDialog.count} 筆指令會回到「未分組」，不會被刪除。`
+        : `「${confirmDialog?.kind === "command" ? confirmDialog.item.title : ""}」將被刪除，此動作無法復原。`;
 
   const emptyTitle =
     categories.length === 0
@@ -498,10 +799,110 @@ export default function App() {
         : `「${activeTab}」還沒有指令`;
   const emptyText =
     categories.length === 0
-      ? "先點「+ 分類」建立一個分類，再加入指令。"
+      ? "先點上方「新增分類」建立一個分類。"
       : normalizedSearch
         ? "試試其他關鍵字，或清空搜尋條件。"
-        : "點右上角「+ 新增指令」加入第一筆。";
+        : "點下方「+ 新增指令」加入第一筆。";
+
+  const renderCard = (item: CommandItem) => {
+    const isCopied = copiedId === item.id;
+    const groupName = item.groupId
+      ? groups.find((g) => g.id === item.groupId)?.name
+      : undefined;
+
+    return (
+      <article
+        key={item.id}
+        className={`cmd-card${draggingId === item.id ? " is-dragging" : ""}`}
+        draggable
+        onDragStart={(e) => handleDragStart(e, item.id)}
+        onDragEnd={() => {
+          setDraggingId(null);
+          setDropTarget(null);
+        }}
+      >
+        <span className="drag-handle" title="拖曳移動到群組" aria-hidden="true">
+          ⠿
+        </span>
+        <div className="cmd-main">
+          <div className="cmd-title-row">
+            <span className="cmd-title">{item.title}</span>
+            <span className="cmd-tag">{item.category}</span>
+            {groupName && <span className="cmd-tag cmd-tag--group">{groupName}</span>}
+          </div>
+          <code className="cmd-code">{item.command}</code>
+        </div>
+        <div className="cmd-actions">
+          <button
+            type="button"
+            className={`icon-btn${isCopied ? " icon-btn--copied" : ""}`}
+            onClick={() => handleCopy(item)}
+            title={isCopied ? "已複製" : "複製指令"}
+            aria-label={isCopied ? "已複製" : "複製指令"}
+          >
+            {isCopied ? <CheckIcon /> : <CopyIcon />}
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => openEditCmdForm(item)}
+            title="修改指令"
+            aria-label="修改指令"
+          >
+            <EditIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-btn icon-btn--danger"
+            onClick={() => setConfirmDialog({ kind: "command", item })}
+            title="刪除指令"
+            aria-label="刪除指令"
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      </article>
+    );
+  };
+
+  const renderSection = (
+    key: string,
+    title: string,
+    sectionItems: CommandItem[],
+    expanded: boolean,
+    onToggle: () => void,
+    extra?: React.ReactNode,
+  ) => (
+    <section
+      className={`group-section${dropTarget === key ? " drop-active" : ""}`}
+      onDragOver={(e) => handleDragOver(e, key)}
+      onDragLeave={handleDragLeave}
+      onDrop={(e) => handleDrop(e, key)}
+    >
+      <header className="group-header">
+        <button
+          type="button"
+          className="group-collapse"
+          onClick={onToggle}
+          aria-label={expanded ? "收合群組" : "展開群組"}
+        >
+          {expanded ? "▾" : "▸"}
+        </button>
+        <span className="group-name">{title}</span>
+        <span className="tab-count">{sectionItems.length}</span>
+        {extra && <div className="group-actions">{extra}</div>}
+      </header>
+      {expanded && (
+        <div className="group-items">
+          {sectionItems.length === 0 ? (
+            <div className="group-empty">拖曳指令卡片到這裡</div>
+          ) : (
+            sectionItems.map(renderCard)
+          )}
+        </div>
+      )}
+    </section>
+  );
 
   return (
     <div className="app">
@@ -518,10 +919,15 @@ export default function App() {
         <button
           type="button"
           className="btn btn--primary"
-          onClick={openAddCmdForm}
-          disabled={categories.length === 0}
+          onClick={() => {
+            setShowCatAdd((prev) => !prev);
+            setShowCatManage(false);
+            setShowGroupAdd(false);
+            setCmdForm(null);
+            setCatError("");
+          }}
         >
-          + 新增指令
+          新增分類
         </button>
       </header>
 
@@ -593,17 +999,6 @@ export default function App() {
           {normalizedCategoryQuery && visibleCategories.length === 0 && (
             <span className="tabs-empty">找不到符合的分類</span>
           )}
-          <button
-            type="button"
-            className={`tab tab-add${showCatForm ? " tab--active" : ""}`}
-            onClick={() => {
-              setShowCatForm((prev) => !prev);
-              setShowCmdForm(false);
-              setCatError("");
-            }}
-          >
-            {showCatForm ? "完成" : "+ 分類"}
-          </button>
         </nav>
         <button
           type="button"
@@ -613,6 +1008,20 @@ export default function App() {
           aria-label="向右捲動分類"
         >
           ›
+        </button>
+        <button
+          type="button"
+          className={`tab-scroll tab-manage${showCatManage ? " is-active" : ""}`}
+          onClick={() => {
+            setShowCatManage((prev) => !prev);
+            setShowCatAdd(false);
+            setShowGroupAdd(false);
+            setCmdForm(null);
+          }}
+          title="管理分類（鎖定、刪除）"
+          aria-label="管理分類"
+        >
+          <ManageIcon />
         </button>
       </div>
 
@@ -646,9 +1055,14 @@ export default function App() {
         </div>
       </div>
 
-      {showCatForm && (
+      {showCatAdd && (
         <div className="panel">
-          <div className="panel-title">新增或修改分類</div>
+          <div className="panel-head">
+            <div className="panel-title">新增分類</div>
+            <button type="button" className="btn btn--sm btn--ghost" onClick={closeForms}>
+              取消
+            </button>
+          </div>
           <form onSubmit={handleAddCategory} className="form-row">
             <input
               ref={categoryRef}
@@ -667,28 +1081,42 @@ export default function App() {
             </button>
           </form>
           {catError && <div className="form-error">{catError}</div>}
+        </div>
+      )}
+
+      {showCatManage && (
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">管理分類（鎖定後無法刪除）</div>
+            <button type="button" className="btn btn--sm btn--ghost" onClick={closeForms}>
+              完成
+            </button>
+          </div>
           <div className="manage-list">
             {categories.map((cat) => (
               <div className="manage-row" key={cat.name}>
                 <span className="manage-name">{cat.name}</span>
-                <span className="tab-count">{categoryCounts.get(cat.name) ?? 0} 筆</span>
+                <span className="tab-count">
+                  {categoryCounts.get(cat.name) ?? 0} 筆
+                </span>
                 <button
                   type="button"
-                  className={`btn btn--sm btn--ghost${cat.locked ? " is-locked" : ""}`}
+                  className={`icon-btn${cat.locked ? " is-locked" : ""}`}
                   onClick={() => toggleCategoryLock(cat.name)}
                   title={cat.locked ? "解鎖分類" : "鎖定分類"}
+                  aria-label={cat.locked ? `解鎖 ${cat.name}` : `鎖定 ${cat.name}`}
                 >
                   <LockIcon locked={cat.locked} />
-                  {cat.locked ? "已鎖定" : "鎖定"}
                 </button>
                 <button
                   type="button"
-                  className="btn btn--sm btn--ghost btn--danger"
+                  className="icon-btn icon-btn--danger"
                   disabled={cat.locked}
                   onClick={() => requestDeleteCategory(cat.name)}
                   title={cat.locked ? "請先解鎖再刪除" : "刪除分類"}
+                  aria-label={`刪除分類 ${cat.name}`}
                 >
-                  刪除
+                  <TrashIcon />
                 </button>
               </div>
             ))}
@@ -696,10 +1124,63 @@ export default function App() {
         </div>
       )}
 
-      {showCmdForm && (
+      <div className="group-bar">
+        <span className="group-bar-title">群組</span>
+        <span className="group-bar-hint">點群組標題圖示可改名或刪除，拖曳卡片可歸類</span>
+        <button
+          type="button"
+          className="btn btn--sm"
+          disabled={!activeTab}
+          onClick={() => {
+            setShowGroupAdd((prev) => !prev);
+            setShowCatAdd(false);
+            setShowCatManage(false);
+            setCmdForm(null);
+            setGroupError("");
+          }}
+        >
+          {showGroupAdd ? "取消" : "+ 新增群組"}
+        </button>
+      </div>
+
+      {showGroupAdd && (
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">在「{activeTab}」新增群組</div>
+            <button type="button" className="btn btn--sm btn--ghost" onClick={closeForms}>
+              取消
+            </button>
+          </div>
+          <form onSubmit={handleAddGroup} className="form-row">
+            <input
+              ref={groupRef}
+              type="text"
+              className="field"
+              placeholder="例如：部署流程、常用查詢"
+              value={groupNameInput}
+              onChange={(e) => {
+                setGroupNameInput(e.target.value);
+                setGroupError("");
+              }}
+              aria-label="群組名稱"
+            />
+            <button type="submit" className="btn btn--primary">
+              加入
+            </button>
+          </form>
+          {groupError && <div className="form-error">{groupError}</div>}
+        </div>
+      )}
+
+      {cmdForm && (
         <form onSubmit={handleSaveCmd} className="panel">
-          <div className="panel-title">
-            {editingId ? `修改「${activeTab}」指令` : `新增至「${activeTab}」`}
+          <div className="panel-head">
+            <div className="panel-title">
+              {cmdForm.mode === "add" ? "新增指令" : "修改指令"}
+            </div>
+            <button type="button" className="btn btn--sm btn--ghost" onClick={closeForms}>
+              取消
+            </button>
           </div>
           <input
             ref={titleRef}
@@ -718,10 +1199,20 @@ export default function App() {
             onChange={(e) => setCommandInput(e.target.value)}
             aria-label="指令內容"
           />
+          <select
+            className="field"
+            value={groupSelect}
+            onChange={(e) => setGroupSelect(e.target.value)}
+            aria-label="所屬群組"
+          >
+            <option value={UNGROUPED_KEY}>未分組</option>
+            {groupsForActive.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </select>
           <div className="form-actions">
-            <button type="button" className="btn btn--ghost" onClick={closeForms}>
-              取消
-            </button>
             <button type="submit" className="btn btn--primary">
               儲存
             </button>
@@ -730,7 +1221,7 @@ export default function App() {
       )}
 
       <main className="list">
-        {filteredItems.length === 0 ? (
+        {activeCategoryItems.length === 0 ? (
           <div className="empty">
             <div className="empty-icon" aria-hidden="true">
               {"{ }"}
@@ -739,51 +1230,110 @@ export default function App() {
             <span>{emptyText}</span>
           </div>
         ) : (
-          filteredItems.map((item) => {
-            const isCopied = copiedId === item.id;
-            return (
-              <article className="cmd-card" key={item.id}>
-                <div className="cmd-main">
-                  <div className="cmd-title-row">
-                    <span className="cmd-title">{item.title}</span>
-                    <span className="cmd-tag">{item.category}</span>
-                  </div>
-                  <code className="cmd-code">{item.command}</code>
-                </div>
-                <div className="cmd-actions">
-                  <button
-                    type="button"
-                    className={`btn btn--sm${isCopied ? " btn--copied" : ""}`}
-                    onClick={() => handleCopy(item)}
-                  >
-                    {isCopied ? "已複製" : "複製"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--sm btn--ghost"
-                    onClick={() => openEditCmdForm(item)}
-                  >
-                    修改
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--sm btn--ghost btn--danger"
-                    onClick={() => setConfirmDialog({ kind: "command", item })}
-                  >
-                    刪除
-                  </button>
-                </div>
-              </article>
-            );
-          })
+          <>
+            {renderSection(
+              UNGROUPED_KEY,
+              "未分組",
+              ungroupedItems,
+              normalizedSearch ? true : !ungroupedCollapsed,
+              () => setUngroupedCollapsed((prev) => !prev),
+            )}
+            {groupsForActive.map((group) => {
+              const groupItems = activeCategoryItems.filter(
+                (item) => item.groupId === group.id,
+              );
+              if (normalizedSearch && groupItems.length === 0) return null;
+
+              const isRenaming = renamingGroupId === group.id;
+              return renderSection(
+                group.id,
+                group.name,
+                groupItems,
+                normalizedSearch ? true : !group.collapsed,
+                () => toggleGroupCollapse(group.id),
+                isRenaming ? (
+                  <>
+                    <input
+                      autoFocus
+                      type="text"
+                      className="field group-rename"
+                      value={renameInput}
+                      onChange={(e) => setRenameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          saveRenameGroup();
+                        } else if (e.key === "Escape") {
+                          e.stopPropagation();
+                          setRenamingGroupId(null);
+                        }
+                      }}
+                      aria-label="群組新名稱"
+                    />
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={saveRenameGroup}
+                      title="儲存名稱"
+                      aria-label="儲存名稱"
+                    >
+                      <CheckIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => setRenamingGroupId(null)}
+                      title="取消改名"
+                      aria-label="取消改名"
+                    >
+                      <CloseIcon />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => startRenameGroup(group)}
+                      title="重新命名群組"
+                      aria-label={`重新命名 ${group.name}`}
+                    >
+                      <EditIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn--danger"
+                      onClick={() => requestDeleteGroup(group)}
+                      title="刪除群組"
+                      aria-label={`刪除群組 ${group.name}`}
+                    >
+                      <TrashIcon />
+                    </button>
+                  </>
+                ),
+              );
+            })}
+          </>
         )}
       </main>
 
+      <div className="list-footer">
+        <button
+          type="button"
+          className="btn btn--add-bottom"
+          onClick={openAddCmdForm}
+          disabled={!activeTab}
+        >
+          + 新增指令
+        </button>
+      </div>
+
       <footer className="statusbar">
         <span>
-          {categories.length} 個分類 · 顯示 {filteredItems.length} / {items.length} 筆指令
+          {categories.length} 個分類 · {groupsForActive.length} 個群組 · 顯示{" "}
+          {activeCategoryItems.length} / {items.length} 筆指令
         </span>
-        <span>Ctrl + K 搜尋指令 · Esc 關閉 / 清空</span>
+        <span>拖曳卡片可移至群組 · Ctrl + K 搜尋</span>
       </footer>
 
       {toast && (
