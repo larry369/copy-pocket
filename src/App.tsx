@@ -351,6 +351,7 @@ const zhTW = {
   commandContentPlaceholder: "指令內容，例如：git status",
   commandAdded: "指令已新增",
   commandUpdated: "指令已更新",
+  commandOrderUpdated: "指令順序已更新",
   commandDeleted: "指令已刪除",
   movedToGroup: '已移動到「{name}」',
   movedToUngrouped: "已移至未分組",
@@ -467,6 +468,7 @@ const en: Strings = {
   commandContentPlaceholder: "e.g. git status",
   commandAdded: "Command added",
   commandUpdated: "Command updated",
+  commandOrderUpdated: "Command order updated",
   commandDeleted: "Command deleted",
   movedToGroup: 'Moved to "{name}"',
   movedToUngrouped: "Moved to Ungrouped",
@@ -562,6 +564,15 @@ function MenuIcon() {
   );
 }
 
+function PinIcon() {
+  return (
+    <Icon>
+      <path d="M12 17v5" />
+      <path d="M9 3h6l-1 5 3 3v2H7v-2l3-3-1-5Z" />
+    </Icon>
+  );
+}
+
 function PlusIcon() {
   return (
     <Icon>
@@ -620,6 +631,10 @@ export default function App() {
   const [scrollState, setScrollState] = useState({ left: false, right: false });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [dropItem, setDropItem] = useState<{
+    id: string;
+    position: "before" | "after";
+  } | null>(null);
 
   const searchRef = useRef<HTMLInputElement | null>(null);
   const categorySearchRef = useRef<HTMLInputElement | null>(null);
@@ -1208,26 +1223,36 @@ export default function App() {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", id);
     setDraggingId(id);
+    setDropItem(null);
+  };
+
+  const clearDragState = () => {
+    setDraggingId(null);
+    setDropTarget(null);
+    setDropItem(null);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLElement>, target: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDropTarget(target);
+    setDropItem(null);
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLElement>) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-      setDropTarget(null);
+      clearDragState();
     }
   };
 
   const handleDrop = (e: React.DragEvent<HTMLElement>, target: string) => {
     e.preventDefault();
     const id = e.dataTransfer.getData("text/plain") || draggingId;
+    clearDragState();
     if (!id) return;
 
     const groupId = target === UNGROUPED_KEY ? undefined : target;
+    if (items.find((item) => item.id === id)?.groupId === groupId) return;
     setItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, groupId } : item)),
     );
@@ -1235,8 +1260,57 @@ export default function App() {
     showToast(
       groupId ? fmt(t.movedToGroup, { name: groupName ?? t.group }) : t.movedToUngrouped,
     );
-    setDraggingId(null);
-    setDropTarget(null);
+  };
+
+  const handleCardDragOver = (e: React.DragEvent<HTMLElement>, item: CommandItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    setDropTarget(item.groupId ?? UNGROUPED_KEY);
+    setDropItem(draggingId === item.id ? null : { id: item.id, position });
+  };
+
+  const handleCardDragLeave = (e: React.DragEvent<HTMLElement>, item: CommandItem) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setDropItem((prev) => (prev?.id === item.id ? null : prev));
+    }
+  };
+
+  const handleCardDrop = (e: React.DragEvent<HTMLElement>, item: CommandItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = e.dataTransfer.getData("text/plain") || draggingId;
+    const position = dropItem?.id === item.id ? dropItem.position : "after";
+    clearDragState();
+    if (!id || id === item.id) return;
+
+    const groupId = item.groupId;
+    const source = items.find((entry) => entry.id === id);
+    if (!source) return;
+
+    setItems((prev) => {
+      const dragged = prev.find((entry) => entry.id === id);
+      if (!dragged) return prev;
+      const next = prev.filter((entry) => entry.id !== id);
+      const targetIndex = next.findIndex((entry) => entry.id === item.id);
+      if (targetIndex < 0) return prev;
+      const insertIndex = position === "before" ? targetIndex : targetIndex + 1;
+      next.splice(insertIndex, 0, { ...dragged, groupId });
+      return next;
+    });
+
+    if (source.groupId === groupId) {
+      showToast(t.commandOrderUpdated);
+    } else {
+      const groupName = groups.find((g) => g.id === groupId)?.name;
+      showToast(
+        groupId
+          ? fmt(t.movedToGroup, { name: groupName ?? t.group })
+          : t.movedToUngrouped,
+      );
+    }
   };
 
   const confirmTitle =
@@ -1283,15 +1357,19 @@ export default function App() {
     return (
       <article
         key={item.id}
-        className={`cmd-card${draggingId === item.id ? " is-dragging" : ""}`}
-        draggable
-        onDragStart={(e) => handleDragStart(e, item.id)}
-        onDragEnd={() => {
-          setDraggingId(null);
-          setDropTarget(null);
-        }}
+        className={`cmd-card${draggingId === item.id ? " is-dragging" : ""}${isCopied ? " is-copied" : ""}${dropItem?.id === item.id ? ` drop-${dropItem.position}` : ""}`}
+        onDragOver={(e) => handleCardDragOver(e, item)}
+        onDragLeave={(e) => handleCardDragLeave(e, item)}
+        onDrop={(e) => handleCardDrop(e, item)}
       >
-        <span className="drag-handle" title={t.dragToGroup} aria-hidden="true">
+        <span
+          className="drag-handle"
+          draggable
+          onDragStart={(e) => handleDragStart(e, item.id)}
+          onDragEnd={clearDragState}
+          title={t.dragToGroup}
+          aria-hidden="true"
+        >
           ⠿
         </span>
         <div className="cmd-main">
@@ -1300,7 +1378,17 @@ export default function App() {
             <span className="cmd-tag">{item.category}</span>
             {groupName && <span className="cmd-tag cmd-tag--group">{groupName}</span>}
           </div>
-          <code className="cmd-code">{item.command}</code>
+          <code
+            className="cmd-code"
+            title={t.copy}
+            onMouseDown={() => window.getSelection()?.removeAllRanges()}
+            onClick={() => {
+              if (window.getSelection()?.toString()) return;
+              void handleCopy(item);
+            }}
+          >
+            {item.command}
+          </code>
         </div>
         <div className="cmd-actions">
           <button
@@ -1358,7 +1446,9 @@ export default function App() {
         >
           {expanded ? "▾" : "▸"}
         </button>
-        <span className="group-name">{title}</span>
+        <button type="button" className="group-name" onClick={onToggle}>
+          {title}
+        </button>
         <span className="tab-count">{sectionItems.length}</span>
         {extra && <div className="group-actions">{extra}</div>}
       </header>
@@ -1383,6 +1473,16 @@ export default function App() {
             <p>{t.tagline}</p>
           </div>
         </div>
+        <button
+          type="button"
+          className={`icon-btn pin-btn${alwaysOnTop ? " is-pinned" : ""}`}
+          onClick={toggleAlwaysOnTop}
+          title={`${t.pinWindow}：${alwaysOnTop ? t.pinOn : t.pinOff}`}
+          aria-label={`${t.pinWindow}：${alwaysOnTop ? t.pinOn : t.pinOff}`}
+          aria-pressed={alwaysOnTop}
+        >
+          <PinIcon />
+        </button>
         <div className="menu-wrap">
           <button
             type="button"
@@ -1395,21 +1495,6 @@ export default function App() {
           </button>
           {menuOpen && (
             <div className="menu-popover" role="menu">
-              <div className="menu-section">
-                <div className="menu-section-title">{t.pinWindow}</div>
-                <button
-                  type="button"
-                  className="menu-item menu-item--pin"
-                  aria-pressed={alwaysOnTop}
-                  onClick={toggleAlwaysOnTop}
-                >
-                  <span
-                    className={`menu-switch${alwaysOnTop ? " is-on" : ""}`}
-                    aria-hidden="true"
-                  />
-                  <span>{alwaysOnTop ? t.pinOn : t.pinOff}</span>
-                </button>
-              </div>
               <div className="menu-section">
                 <div className="menu-section-title">{t.theme}</div>
                 <div className="menu-choices" role="group" aria-label={t.theme}>
