@@ -173,6 +173,50 @@ kbd {
   left: 11px;
 }
 
+.category-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1;
+  transition: background 0.16s, color 0.16s;
+}
+
+.action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.action-btn.is-active {
+  background: rgba(76, 141, 255, 0.16);
+  color: #dce9ff;
+}
+
+.action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
 .tabs-row {
   display: flex;
   align-items: center;
@@ -231,16 +275,6 @@ kbd {
 .tab-scroll:disabled {
   cursor: default;
   opacity: 0.35;
-}
-
-.tab-manage {
-  color: var(--muted-strong);
-}
-
-.tab-manage.is-active {
-  border-color: var(--accent);
-  background: rgba(76, 141, 255, 0.16);
-  color: #dce9ff;
 }
 
 .tabs-empty {
@@ -432,6 +466,12 @@ kbd {
   color: #fecdd3;
 }
 
+.icon-btn.is-active {
+  border-color: var(--accent);
+  background: rgba(76, 141, 255, 0.16);
+  color: #dce9ff;
+}
+
 .icon-btn.is-locked {
   color: #fbbf24;
 }
@@ -555,31 +595,19 @@ kbd {
   font-size: 12px;
 }
 
-.group-bar {
+.manage-row-form {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: rgba(18, 26, 45, 0.6);
-}
-
-.group-bar-title {
-  flex: none;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.group-bar-hint {
-  flex: 1;
+  gap: 6px;
+  width: 100%;
   min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.list-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px 2px;
 }
 
 .manage-row .is-locked {
@@ -798,23 +826,6 @@ kbd {
 
 .empty span {
   font-size: 12px;
-}
-
-.list-footer {
-  flex: none;
-}
-
-.btn--add-bottom {
-  width: 100%;
-  border-style: dashed;
-  background: rgba(18, 26, 45, 0.6);
-  color: var(--muted-strong);
-}
-
-.btn--add-bottom:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: rgba(76, 141, 255, 0.12);
-  color: #dce9ff;
 }
 
 .statusbar {

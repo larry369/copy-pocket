@@ -293,12 +293,10 @@ function CloseIcon() {
   );
 }
 
-function ManageIcon() {
+function PlusIcon() {
   return (
     <Icon>
-      <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
-      <circle cx="15" cy="7" r="2" />
-      <circle cx="9" cy="17" r="2" />
+      <path d="M12 5v14M5 12h14" />
     </Icon>
   );
 }
@@ -324,9 +322,10 @@ export default function App() {
     return categories[0]?.name ?? "";
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [showCatAdd, setShowCatAdd] = useState(false);
-  const [showCatManage, setShowCatManage] = useState(false);
+  const [catPanel, setCatPanel] = useState<"none" | "add" | "edit">("none");
   const [newCatName, setNewCatName] = useState("");
+  const [editingCategory, setEditingCategory] = useState<Category>("");
+  const [editCatName, setEditCatName] = useState("");
   const [catError, setCatError] = useState("");
   const [showGroupAdd, setShowGroupAdd] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
@@ -377,8 +376,12 @@ export default function App() {
   }, [groups]);
 
   useEffect(() => {
-    if (showCatAdd) categoryRef.current?.focus();
-  }, [showCatAdd]);
+    if (catPanel === "add") categoryRef.current?.focus();
+  }, [catPanel]);
+
+  useEffect(() => {
+    if (editingCategory) categoryRef.current?.focus();
+  }, [editingCategory]);
 
   useEffect(() => {
     if (showGroupAdd) groupRef.current?.focus();
@@ -438,7 +441,7 @@ export default function App() {
           setConfirmDialog(null);
         } else if (renamingGroupId) {
           setRenamingGroupId(null);
-        } else if (showCatAdd || showCatManage || showGroupAdd || cmdForm) {
+        } else if (catPanel !== "none" || showGroupAdd || cmdForm) {
           closeForms();
         } else if (document.activeElement === searchRef.current) {
           setSearch("");
@@ -462,8 +465,7 @@ export default function App() {
   }, [
     confirmDialog,
     renamingGroupId,
-    showCatAdd,
-    showCatManage,
+    catPanel,
     showGroupAdd,
     cmdForm,
   ]);
@@ -484,13 +486,42 @@ export default function App() {
   };
 
   const closeForms = () => {
-    setShowCatAdd(false);
-    setShowCatManage(false);
+    setCatPanel("none");
     setShowGroupAdd(false);
     setCmdForm(null);
+    setNewCatName("");
+    setEditingCategory("");
+    setEditCatName("");
     setCatError("");
     setGroupError("");
     setRenamingGroupId(null);
+  };
+
+  const toggleCatPanel = (panel: "add" | "edit") => {
+    setCatError("");
+    setShowGroupAdd(false);
+    setCmdForm(null);
+
+    if (catPanel === panel) {
+      setCatPanel("none");
+      setEditingCategory("");
+      setEditCatName("");
+      return;
+    }
+
+    if (panel === "add") {
+      setNewCatName("");
+    } else {
+      setEditingCategory("");
+      setEditCatName("");
+    }
+    setCatPanel(panel);
+  };
+
+  const startRenameCategory = (name: Category) => {
+    setEditingCategory(name);
+    setEditCatName(name);
+    setCatError("");
   };
 
   const scrollTabs = (direction: -1 | 1) => {
@@ -531,10 +562,54 @@ export default function App() {
 
     setCategories((prev) => [...prev, { name: trimmed, locked: false }]);
     setActiveTab(trimmed);
+    setCategoryQuery("");
     setNewCatName("");
     setCatError("");
-    setShowCatAdd(false);
+    setCatPanel("none");
     showToast("分類已新增");
+  };
+
+  const handleRenameCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = editCatName.trim();
+    if (!trimmed || !editingCategory) return;
+
+    if (trimmed === editingCategory) {
+      setEditingCategory("");
+      setEditCatName("");
+      return;
+    }
+
+    if (
+      categories.some(
+        (c) =>
+          c.name !== editingCategory &&
+          c.name.toLowerCase() === trimmed.toLowerCase(),
+      )
+    ) {
+      setCatError("這個分類已經存在了");
+      return;
+    }
+
+    setCategories((prev) =>
+      prev.map((c) => (c.name === editingCategory ? { ...c, name: trimmed } : c)),
+    );
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.category === editingCategory ? { ...g, category: trimmed } : g,
+      ),
+    );
+    setItems((prev) =>
+      prev.map((item) =>
+        item.category === editingCategory ? { ...item, category: trimmed } : item,
+      ),
+    );
+    if (activeTab === editingCategory) setActiveTab(trimmed);
+    setCategoryQuery("");
+    setEditingCategory("");
+    setEditCatName("");
+    setCatError("");
+    showToast("分類已重新命名");
   };
 
   const toggleCategoryLock = (name: Category) => {
@@ -648,6 +723,10 @@ export default function App() {
       setItems((prev) => prev.filter((item) => item.category !== name));
       setGroups((prev) => prev.filter((g) => g.category !== name));
       if (activeTab === name) setActiveTab(remaining[0]?.name ?? "");
+      if (editingCategory === name) {
+        setEditingCategory("");
+        setEditCatName("");
+      }
       if (copiedId && items.find((item) => item.id === copiedId)?.category === name) {
         setCopiedId(null);
       }
@@ -690,8 +769,7 @@ export default function App() {
     setCommandInput("");
     setGroupSelect(UNGROUPED_KEY);
     setCmdForm({ mode: "add" });
-    setShowCatAdd(false);
-    setShowCatManage(false);
+    setCatPanel("none");
     setShowGroupAdd(false);
     setCatError("");
     setGroupError("");
@@ -702,8 +780,7 @@ export default function App() {
     setCommandInput(item.command);
     setGroupSelect(item.groupId ?? UNGROUPED_KEY);
     setCmdForm({ mode: "edit", item });
-    setShowCatAdd(false);
-    setShowCatManage(false);
+    setCatPanel("none");
     setShowGroupAdd(false);
     setCatError("");
     setGroupError("");
@@ -799,10 +876,10 @@ export default function App() {
         : `「${activeTab}」還沒有指令`;
   const emptyText =
     categories.length === 0
-      ? "先點上方「新增分類」建立一個分類。"
+      ? "先點分類搜尋下方的 + 建立一個分類。"
       : normalizedSearch
         ? "試試其他關鍵字，或清空搜尋條件。"
-        : "點下方「+ 新增指令」加入第一筆。";
+        : "點「+ 指令」加入第一筆。";
 
   const renderCard = (item: CommandItem) => {
     const isCopied = copiedId === item.id;
@@ -916,19 +993,6 @@ export default function App() {
             <p>常用指令收納，一鍵複製</p>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => {
-            setShowCatAdd((prev) => !prev);
-            setShowCatManage(false);
-            setShowGroupAdd(false);
-            setCmdForm(null);
-            setCatError("");
-          }}
-        >
-          新增分類
-        </button>
       </header>
 
       <div className="search-wrap search-wrap--cat">
@@ -955,6 +1019,175 @@ export default function App() {
           aria-label="搜尋分類"
         />
       </div>
+
+      <div className="category-actions">
+        <button
+          type="button"
+          className={`action-btn${catPanel === "add" ? " is-active" : ""}`}
+          onClick={() => toggleCatPanel("add")}
+          title="新增分類"
+          aria-label="新增分類"
+        >
+          <PlusIcon />
+          <span>分類</span>
+        </button>
+        <button
+          type="button"
+          className={`action-btn${catPanel === "edit" ? " is-active" : ""}`}
+          disabled={categories.length === 0}
+          onClick={() => toggleCatPanel("edit")}
+          title="管理所有分類（改名、鎖定、刪除）"
+          aria-label="管理所有分類"
+        >
+          <EditIcon />
+          <span>編輯</span>
+        </button>
+      </div>
+
+      {catPanel === "add" && (
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">新增分類</div>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={closeForms}
+              title="取消"
+              aria-label="取消新增分類"
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          <form onSubmit={handleAddCategory} className="form-row">
+            <input
+              ref={categoryRef}
+              type="text"
+              className="field"
+              placeholder="例如：docker、sql、linux"
+              value={newCatName}
+              onChange={(e) => {
+                setNewCatName(e.target.value);
+                setCatError("");
+              }}
+              aria-label="分類名稱"
+            />
+            <button
+              type="submit"
+              className="btn btn--primary"
+              title="加入分類"
+              aria-label="加入分類"
+            >
+              <CheckIcon />
+            </button>
+          </form>
+          {catError && <div className="form-error">{catError}</div>}
+        </div>
+      )}
+
+      {catPanel === "edit" && (
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">管理分類（鎖定後無法刪除）</div>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={closeForms}
+              title="完成"
+              aria-label="完成分類管理"
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          {catError && <div className="form-error">{catError}</div>}
+          <div className="manage-list">
+            {categories.map((cat) => {
+              const isRenaming = editingCategory === cat.name;
+              return (
+                <div className="manage-row" key={cat.name}>
+                  {isRenaming ? (
+                    <form onSubmit={handleRenameCategory} className="manage-row-form">
+                      <input
+                        ref={categoryRef}
+                        type="text"
+                        className="field"
+                        value={editCatName}
+                        onChange={(e) => {
+                          setEditCatName(e.target.value);
+                          setCatError("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.stopPropagation();
+                            setEditingCategory("");
+                            setEditCatName("");
+                          }
+                        }}
+                        aria-label={`重新命名 ${cat.name}`}
+                      />
+                      <button
+                        type="submit"
+                        className="icon-btn"
+                        title="儲存名稱"
+                        aria-label="儲存名稱"
+                      >
+                        <CheckIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          setEditingCategory("");
+                          setEditCatName("");
+                          setCatError("");
+                        }}
+                        title="取消改名"
+                        aria-label="取消改名"
+                      >
+                        <CloseIcon />
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <span className="manage-name">{cat.name}</span>
+                      <span className="tab-count">
+                        {categoryCounts.get(cat.name) ?? 0} 筆
+                      </span>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => startRenameCategory(cat.name)}
+                        title="重新命名分類"
+                        aria-label={`重新命名 ${cat.name}`}
+                      >
+                        <EditIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className={`icon-btn${cat.locked ? " is-locked" : ""}`}
+                        onClick={() => toggleCategoryLock(cat.name)}
+                        title={cat.locked ? "解鎖分類" : "鎖定分類"}
+                        aria-label={cat.locked ? `解鎖 ${cat.name}` : `鎖定 ${cat.name}`}
+                      >
+                        <LockIcon locked={cat.locked} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn--danger"
+                        disabled={cat.locked}
+                        onClick={() => requestDeleteCategory(cat.name)}
+                        title={cat.locked ? "請先解鎖再刪除" : "刪除分類"}
+                        aria-label={`刪除分類 ${cat.name}`}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="tabs-row">
         <button
@@ -1009,20 +1242,6 @@ export default function App() {
         >
           ›
         </button>
-        <button
-          type="button"
-          className={`tab-scroll tab-manage${showCatManage ? " is-active" : ""}`}
-          onClick={() => {
-            setShowCatManage((prev) => !prev);
-            setShowCatAdd(false);
-            setShowGroupAdd(false);
-            setCmdForm(null);
-          }}
-          title="管理分類（鎖定、刪除）"
-          aria-label="管理分類"
-        >
-          <ManageIcon />
-        </button>
       </div>
 
       <div className="search-wrap search-wrap--content">
@@ -1055,91 +1274,31 @@ export default function App() {
         </div>
       </div>
 
-      {showCatAdd && (
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">新增分類</div>
-            <button type="button" className="btn btn--sm btn--ghost" onClick={closeForms}>
-              取消
-            </button>
-          </div>
-          <form onSubmit={handleAddCategory} className="form-row">
-            <input
-              ref={categoryRef}
-              type="text"
-              className="field"
-              placeholder="例如：docker、sql、linux"
-              value={newCatName}
-              onChange={(e) => {
-                setNewCatName(e.target.value);
-                setCatError("");
-              }}
-              aria-label="分類名稱"
-            />
-            <button type="submit" className="btn btn--primary">
-              加入
-            </button>
-          </form>
-          {catError && <div className="form-error">{catError}</div>}
-        </div>
-      )}
-
-      {showCatManage && (
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">管理分類（鎖定後無法刪除）</div>
-            <button type="button" className="btn btn--sm btn--ghost" onClick={closeForms}>
-              完成
-            </button>
-          </div>
-          <div className="manage-list">
-            {categories.map((cat) => (
-              <div className="manage-row" key={cat.name}>
-                <span className="manage-name">{cat.name}</span>
-                <span className="tab-count">
-                  {categoryCounts.get(cat.name) ?? 0} 筆
-                </span>
-                <button
-                  type="button"
-                  className={`icon-btn${cat.locked ? " is-locked" : ""}`}
-                  onClick={() => toggleCategoryLock(cat.name)}
-                  title={cat.locked ? "解鎖分類" : "鎖定分類"}
-                  aria-label={cat.locked ? `解鎖 ${cat.name}` : `鎖定 ${cat.name}`}
-                >
-                  <LockIcon locked={cat.locked} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--danger"
-                  disabled={cat.locked}
-                  onClick={() => requestDeleteCategory(cat.name)}
-                  title={cat.locked ? "請先解鎖再刪除" : "刪除分類"}
-                  aria-label={`刪除分類 ${cat.name}`}
-                >
-                  <TrashIcon />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="group-bar">
-        <span className="group-bar-title">群組</span>
-        <span className="group-bar-hint">點群組標題圖示可改名或刪除，拖曳卡片可歸類</span>
+      <div className="list-actions">
         <button
           type="button"
-          className="btn btn--sm"
+          className={`action-btn${cmdForm ? " is-active" : ""}`}
+          onClick={openAddCmdForm}
+          disabled={!activeTab}
+          title="新增指令"
+        >
+          <PlusIcon />
+          <span>指令</span>
+        </button>
+        <button
+          type="button"
+          className={`action-btn${showGroupAdd ? " is-active" : ""}`}
           disabled={!activeTab}
           onClick={() => {
             setShowGroupAdd((prev) => !prev);
-            setShowCatAdd(false);
-            setShowCatManage(false);
+            setCatPanel("none");
             setCmdForm(null);
             setGroupError("");
           }}
+          title="新增群組"
         >
-          {showGroupAdd ? "取消" : "+ 新增群組"}
+          <PlusIcon />
+          <span>群組</span>
         </button>
       </div>
 
@@ -1317,23 +1476,12 @@ export default function App() {
         )}
       </main>
 
-      <div className="list-footer">
-        <button
-          type="button"
-          className="btn btn--add-bottom"
-          onClick={openAddCmdForm}
-          disabled={!activeTab}
-        >
-          + 新增指令
-        </button>
-      </div>
-
       <footer className="statusbar">
         <span>
           {categories.length} 個分類 · {groupsForActive.length} 個群組 · 顯示{" "}
           {activeCategoryItems.length} / {items.length} 筆指令
         </span>
-        <span>拖曳卡片可移至群組 · Ctrl + K 搜尋</span>
+        <span>Ctrl + K 搜尋</span>
       </footer>
 
       {toast && (
