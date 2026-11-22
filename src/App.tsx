@@ -1380,7 +1380,6 @@ export default function App() {
           </div>
           <code
             className="cmd-code"
-            title={t.copy}
             onMouseDown={() => window.getSelection()?.removeAllRanges()}
             onClick={() => {
               if (window.getSelection()?.toString()) return;
@@ -1395,7 +1394,6 @@ export default function App() {
             type="button"
             className={`icon-btn${isCopied ? " icon-btn--copied" : ""}`}
             onClick={() => handleCopy(item)}
-            title={isCopied ? t.copied : t.copy}
             aria-label={isCopied ? t.copied : t.copy}
           >
             {isCopied ? <CheckIcon /> : <CopyIcon />}
