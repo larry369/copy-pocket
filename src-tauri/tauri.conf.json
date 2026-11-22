@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "command-pocket",
+  "productName": "copy-pocket",
   "version": "0.1.0",
-  "identifier": "com.larry.command-pocket",
+  "identifier": "com.larry.copy-pocket",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "appDirectoriesOverride": "./app-data",
     "windows": [
       {
-        "title": "command-pocket",
+        "title": "copy-pocket",
         "width": 460,
         "height": 754,
         "minWidth": 460,

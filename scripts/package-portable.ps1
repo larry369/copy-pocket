@@ -3,12 +3,12 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $runtimeSource = Join-Path $root "src-tauri\WebView2Runtime"
 $runtimeExe = Join-Path $runtimeSource "msedgewebview2.exe"
-$releaseExe = Join-Path $root "src-tauri\target\release\command-pocket.exe"
+$releaseExe = Join-Path $root "src-tauri\target\release\copy-pocket.exe"
 $outRoot = Join-Path $root "dist-portable"
-$appDir = Join-Path $outRoot "CommandPocket"
+$appDir = Join-Path $outRoot "CopyPocket"
 $runtimeDest = Join-Path $appDir "WebView2Runtime"
 $dataDir = Join-Path $appDir "app-data"
-$zipPath = Join-Path $outRoot "CommandPocket-portable-win-x64.zip"
+$zipPath = Join-Path $outRoot "CopyPocket-portable-win-x64.zip"
 
 if (Test-Path -LiteralPath $runtimeSource) {
     $foundExe = Get-ChildItem -LiteralPath $runtimeSource -Recurse -Filter "msedgewebview2.exe" -File | Select-Object -First 1
