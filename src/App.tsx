@@ -266,6 +266,8 @@ const zhTW = {
   pinFailed: "固定畫面設定失敗",
   pinned: "已固定畫面",
   unpinned: "已取消固定畫面",
+  pinOn: "已固定",
+  pinOff: "未固定",
   theme: "主題",
   dark: "深色",
   light: "淺色",
@@ -380,6 +382,8 @@ const en: Strings = {
   pinFailed: "Failed to change window pinning",
   pinned: "Window pinned on top",
   unpinned: "Window unpinned",
+  pinOn: "Pinned",
+  pinOff: "Not pinned",
   theme: "Theme",
   dark: "Dark",
   light: "Light",
@@ -808,16 +812,17 @@ export default function App() {
     showToast(next ? t.pinned : t.unpinned);
   };
 
-  const toggleTheme = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
-    setTheme(next);
+  const chooseTheme = (next: Theme) => {
     setMenuOpen(false);
+    if (next === theme) return;
+    setTheme(next);
     showToast(next === "dark" ? t.themeDark : t.themeLight);
   };
 
-  const toggleLang = () => {
-    setLang(lang === "zh-TW" ? "en" : "zh-TW");
+  const chooseLang = (next: Lang) => {
     setMenuOpen(false);
+    if (next === lang) return;
+    setLang(next);
   };
 
   const closeForms = () => {
@@ -1390,41 +1395,63 @@ export default function App() {
           </button>
           {menuOpen && (
             <div className="menu-popover" role="menu">
-              <button
-                type="button"
-                className="menu-item"
-                role="menuitemcheckbox"
-                aria-checked={alwaysOnTop}
-                onClick={toggleAlwaysOnTop}
-              >
-                <span>{t.pinWindow}</span>
-                <span
-                  className={`menu-switch${alwaysOnTop ? " is-on" : ""}`}
-                  aria-hidden="true"
-                />
-              </button>
-              <button
-                type="button"
-                className="menu-item"
-                role="menuitem"
-                onClick={toggleTheme}
-              >
-                <span>{t.theme}</span>
-                <span className="menu-item-value">
-                  {theme === "dark" ? t.dark : t.light}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="menu-item"
-                role="menuitem"
-                onClick={toggleLang}
-              >
-                <span>{t.language}</span>
-                <span className="menu-item-value">
-                  {lang === "zh-TW" ? t.langZH : t.langEN}
-                </span>
-              </button>
+              <div className="menu-section">
+                <div className="menu-section-title">{t.pinWindow}</div>
+                <button
+                  type="button"
+                  className="menu-item menu-item--pin"
+                  aria-pressed={alwaysOnTop}
+                  onClick={toggleAlwaysOnTop}
+                >
+                  <span
+                    className={`menu-switch${alwaysOnTop ? " is-on" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span>{alwaysOnTop ? t.pinOn : t.pinOff}</span>
+                </button>
+              </div>
+              <div className="menu-section">
+                <div className="menu-section-title">{t.theme}</div>
+                <div className="menu-choices" role="group" aria-label={t.theme}>
+                  <button
+                    type="button"
+                    className={`menu-choice${theme === "dark" ? " is-selected" : ""}`}
+                    aria-pressed={theme === "dark"}
+                    onClick={() => chooseTheme("dark")}
+                  >
+                    {t.dark}
+                  </button>
+                  <button
+                    type="button"
+                    className={`menu-choice${theme === "light" ? " is-selected" : ""}`}
+                    aria-pressed={theme === "light"}
+                    onClick={() => chooseTheme("light")}
+                  >
+                    {t.light}
+                  </button>
+                </div>
+              </div>
+              <div className="menu-section">
+                <div className="menu-section-title">{t.language}</div>
+                <div className="menu-choices" role="group" aria-label={t.language}>
+                  <button
+                    type="button"
+                    className={`menu-choice${lang === "zh-TW" ? " is-selected" : ""}`}
+                    aria-pressed={lang === "zh-TW"}
+                    onClick={() => chooseLang("zh-TW")}
+                  >
+                    {t.langZH}
+                  </button>
+                  <button
+                    type="button"
+                    className={`menu-choice${lang === "en" ? " is-selected" : ""}`}
+                    aria-pressed={lang === "en"}
+                    onClick={() => chooseLang("en")}
+                  >
+                    {t.langEN}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
