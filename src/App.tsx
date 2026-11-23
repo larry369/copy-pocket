@@ -679,6 +679,9 @@ export default function App() {
   const [fontSize, setFontSize] = useState<FontSize>(loadFontSize);
   const [opacity, setOpacity] = useState(loadOpacity);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(loadCategoriesCollapsed);
+  const [isWide, setIsWide] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 900px)").matches,
+  );
   const t = I18N[lang];
   const [showGroupAdd, setShowGroupAdd] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
@@ -881,6 +884,14 @@ export default function App() {
       );
     } catch {}
   }, [categoriesCollapsed]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 900px)");
+    const onChange = (e: MediaQueryListEvent) => setIsWide(e.matches);
+    setIsWide(query.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -1863,7 +1874,7 @@ export default function App() {
         </div>
       </header>
 
-      {categoriesCollapsed ? (
+      {!isWide && categoriesCollapsed ? (
         <div className="category-collapsed-bar">
           <div className="category-collapsed-select-wrap">
             <select
@@ -1901,7 +1912,7 @@ export default function App() {
           </button>
         </div>
       ) : (
-        <div className="category-area">
+        <div className="category-area" data-label={t.category}>
           <div className="category-search-row">
             <div className="search-wrap search-wrap--cat">
               <span className="search-icon" aria-hidden="true">
@@ -2187,6 +2198,7 @@ export default function App() {
         </div>
       )}
 
+      <div className="command-area" data-label={t.command}>
       <div className="search-wrap search-wrap--content">
         <span className="search-icon" aria-hidden="true">
           <svg
@@ -2449,6 +2461,7 @@ export default function App() {
           </>
         )}
       </main>
+      </div>
 
       <footer className="statusbar">
         <span>

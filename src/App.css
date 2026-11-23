@@ -168,6 +168,14 @@ input:focus-visible {
   padding: 12px;
 }
 
+.command-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -1249,6 +1257,98 @@ kbd {
   from {
     opacity: 0;
     transform: translate(-50%, 8px);
+  }
+}
+
+@media (min-width: 900px) {
+  .app {
+    display: grid;
+    max-width: 1180px;
+    grid-template-areas:
+      "header header"
+      "categories commands"
+      "status status";
+    grid-template-columns: 230px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  .app-header {
+    grid-area: header;
+  }
+
+  .category-area,
+  .category-collapsed-bar {
+    grid-area: categories;
+    min-height: 0;
+  }
+
+  .category-area {
+    padding: 10px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+  }
+
+  .category-area::before,
+  .command-area::before {
+    color: var(--muted);
+    font-size: calc(10px * var(--font-scale));
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .category-area::before {
+    content: attr(data-label);
+  }
+
+  .command-area {
+    grid-area: commands;
+  }
+
+  .command-area::before {
+    content: attr(data-label);
+  }
+
+  .category-area .tabs-row {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .tab-scroll {
+    display: none;
+  }
+
+  .tabs {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .tabs::-webkit-scrollbar {
+    width: 6px;
+    height: 0;
+  }
+
+  .tab {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .tab-count {
+    margin-left: auto;
+  }
+
+  .category-collapse-btn {
+    display: none;
+  }
+
+  .statusbar {
+    grid-area: status;
   }
 }
 
