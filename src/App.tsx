@@ -1827,29 +1827,31 @@ export default function App() {
 
       {categoriesCollapsed ? (
         <div className="category-collapsed-bar">
-          <select
-            className="category-collapsed-select"
-            value={activeTab}
-            onChange={(e) => {
-              setActiveTab(e.target.value);
-              setCategoryQuery("");
-              closeForms();
-            }}
-            aria-label={t.category}
-          >
-            {categories.length === 0 ? (
-              <option value="">{t.noCategories}</option>
-            ) : (
-              categories.map((cat) => (
-                <option key={cat.name} value={cat.name}>
-                  {cat.locked ? `${cat.name} · ${t.locked}` : cat.name}
-                </option>
-              ))
-            )}
-          </select>
+          <div className="category-collapsed-select-wrap">
+            <select
+              className="category-collapsed-select"
+              value={activeTab}
+              onChange={(e) => {
+                setActiveTab(e.target.value);
+                setCategoryQuery("");
+                closeForms();
+              }}
+              aria-label={t.category}
+            >
+              {categories.length === 0 ? (
+                <option value="">{t.noCategories}</option>
+              ) : (
+                categories.map((cat) => (
+                  <option key={cat.name} value={cat.name}>
+                    {cat.locked ? `${cat.name} · ${t.locked}` : cat.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
           <button
             type="button"
-            className="category-collapse-btn"
+            className="category-collapse-btn category-collapse-btn--boxed"
             onClick={() => setCategoriesCollapsed(false)}
             title={t.expandCategories}
             aria-label={t.expandCategories}
