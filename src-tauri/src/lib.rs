@@ -4,6 +4,41 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[tauri::command]
+fn set_window_opacity(window: tauri::WebviewWindow, value: f64) -> Result<(), String> {
+    let value = value.clamp(0.4, 1.0);
+
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::COLORREF;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE,
+            LWA_ALPHA, WS_EX_LAYERED,
+        };
+
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+        let alpha = (value * 255.0).round().clamp(0.0, 255.0) as u8;
+
+        unsafe {
+            let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let layered = WS_EX_LAYERED.0 as isize;
+            if ex_style & layered == 0 {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | layered);
+            }
+            SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        let _ = value;
+    }
+
+    Ok(())
+}
+
 #[cfg(windows)]
 fn grant_webview2_permissions(path: &std::path::Path) {
     use std::os::windows::process::CommandExt;
@@ -54,7 +89,7 @@ pub fn run() {
     setup_portable_webview2();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, set_window_opacity])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

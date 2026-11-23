@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import appIcon from "../app-icon.png";
 
 type Category = string;
 
@@ -54,6 +53,10 @@ const LEGACY_CATS_KEY = "command_pocket_categories_v2";
 const STORAGE_GROUPS_KEY = "command_pocket_groups_v1";
 const STORAGE_THEME_KEY = "command_pocket_theme_v1";
 const STORAGE_LANG_KEY = "command_pocket_lang_v1";
+const STORAGE_FONT_SIZE_KEY = "command_pocket_font_size_v1";
+const STORAGE_OPACITY_KEY = "command_pocket_opacity_v1";
+const STORAGE_CATEGORIES_COLLAPSED_KEY = "command_pocket_categories_collapsed_v1";
+const GROUP_DND_TYPE = "application/x-command-pocket-group";
 
 const DEFAULT_COMMANDS: CommandItem[] = [
   {
@@ -245,6 +248,7 @@ function loadGroups(): GroupItem[] {
 
 type Theme = "dark" | "light";
 type Lang = "zh-TW" | "en";
+type FontSize = "small" | "medium" | "large";
 
 function loadTheme(): Theme {
   try {
@@ -262,12 +266,40 @@ function loadLang(): Lang {
   }
 }
 
+function loadFontSize(): FontSize {
+  try {
+    const value = localStorage.getItem(STORAGE_FONT_SIZE_KEY);
+    return value === "small" || value === "large" ? value : "medium";
+  } catch {
+    return "medium";
+  }
+}
+
+function loadOpacity(): number {
+  try {
+    const raw = localStorage.getItem(STORAGE_OPACITY_KEY);
+    if (raw === null) return 100;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return 100;
+    return Math.min(100, Math.max(40, Math.round(value)));
+  } catch {
+    return 100;
+  }
+}
+
+function loadCategoriesCollapsed(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_CATEGORIES_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function fmt(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
 }
 
 const zhTW = {
-  tagline: "常用指令收納，一鍵複製",
   settings: "設定",
   openSettings: "開啟設定選單",
   pinWindow: "固定畫面",
@@ -284,6 +316,12 @@ const zhTW = {
   language: "語系",
   langZH: "繁中",
   langEN: "English",
+  fontSize: "字級",
+  fontSmall: "小",
+  fontMedium: "中",
+  fontLarge: "大",
+  fontSizeUpdated: "字級已調整",
+  opacity: "透明度",
   category: "分類",
   command: "指令",
   group: "群組",
@@ -327,9 +365,12 @@ const zhTW = {
   scrollLeft: "向左捲動分類",
   scrollRight: "向右捲動分類",
   categoriesNav: "指令分類",
+  collapseCategories: "收合上方分類",
+  expandCategories: "展開上方分類",
   searchCommands: "搜尋目前分類的指令說明或內容",
   searchShortcut: "Ctrl + K 搜尋",
   addCommand: "新增指令",
+  addCommandIn: '在「{name}」新增指令',
   addGroup: "新增群組",
   addGroupIn: '在「{name}」新增群組',
   groupName: "群組名稱",
@@ -339,6 +380,7 @@ const zhTW = {
   groupExists: "這個群組已經存在了",
   groupAdded: "群組已新增",
   groupRenamed: "群組已重新命名",
+  groupOrderUpdated: "群組順序已更新",
   deleteGroup: "刪除群組",
   deleteGroupItem: "刪除群組 {name}",
   renameGroup: "重新命名群組",
@@ -386,7 +428,6 @@ const zhTW = {
 type Strings = typeof zhTW;
 
 const en: Strings = {
-  tagline: "Your everyday commands, one click away",
   settings: "Settings",
   openSettings: "Open settings menu",
   pinWindow: "Keep on top",
@@ -403,6 +444,12 @@ const en: Strings = {
   language: "Language",
   langZH: "繁中",
   langEN: "English",
+  fontSize: "Text size",
+  fontSmall: "Small",
+  fontMedium: "Medium",
+  fontLarge: "Large",
+  fontSizeUpdated: "Text size updated",
+  opacity: "Opacity",
   category: "Category",
   command: "Command",
   group: "Group",
@@ -446,9 +493,12 @@ const en: Strings = {
   scrollLeft: "Scroll categories left",
   scrollRight: "Scroll categories right",
   categoriesNav: "Command categories",
+  collapseCategories: "Collapse category tabs",
+  expandCategories: "Expand category tabs",
   searchCommands: "Search command titles or content in this category",
   searchShortcut: "Ctrl + K to search",
   addCommand: "Add command",
+  addCommandIn: 'Add command in "{name}"',
   addGroup: "Add group",
   addGroupIn: 'Add group in "{name}"',
   groupName: "Group name",
@@ -458,6 +508,7 @@ const en: Strings = {
   groupExists: "This group already exists",
   groupAdded: "Group added",
   groupRenamed: "Group renamed",
+  groupOrderUpdated: "Group order updated",
   deleteGroup: "Delete group",
   deleteGroupItem: 'Delete group "{name}"',
   renameGroup: "Rename group",
@@ -625,6 +676,9 @@ export default function App() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(true);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [lang, setLang] = useState<Lang>(loadLang);
+  const [fontSize, setFontSize] = useState<FontSize>(loadFontSize);
+  const [opacity, setOpacity] = useState(loadOpacity);
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(loadCategoriesCollapsed);
   const t = I18N[lang];
   const [showGroupAdd, setShowGroupAdd] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
@@ -645,6 +699,11 @@ export default function App() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dropItem, setDropItem] = useState<{
+    id: string;
+    position: "before" | "after";
+  } | null>(null);
+  const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
+  const [dropGroupItem, setDropGroupItem] = useState<{
     id: string;
     position: "before" | "after";
   } | null>(null);
@@ -704,7 +763,7 @@ export default function App() {
     const onResize = () => updateTabScroll();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [categories, categoryQuery]);
+  }, [categories, categoryQuery, categoriesCollapsed]);
 
   useEffect(() => {
     const el = tabsRef.current;
@@ -723,7 +782,7 @@ export default function App() {
 
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [categoriesCollapsed]);
 
   useEffect(() => {
     const query = categoryQuery.trim().toLowerCase();
@@ -798,6 +857,30 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
+    document.documentElement.dataset.fontSize = fontSize;
+    try {
+      localStorage.setItem(STORAGE_FONT_SIZE_KEY, fontSize);
+    } catch {}
+  }, [fontSize]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_OPACITY_KEY, String(opacity));
+    } catch {}
+    if (!isTauri()) return;
+    void invoke("set_window_opacity", { value: opacity / 100 }).catch(() => {});
+  }, [opacity]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_CATEGORIES_COLLAPSED_KEY,
+        categoriesCollapsed ? "1" : "0",
+      );
+    } catch {}
+  }, [categoriesCollapsed]);
+
+  useEffect(() => {
     if (!isTauri()) return;
     getCurrentWindow()
       .isAlwaysOnTop()
@@ -853,6 +936,16 @@ export default function App() {
     setLang(next);
   };
 
+  const chooseFontSize = (next: FontSize) => {
+    setMenuOpen(false);
+    if (next === fontSize) return;
+    setFontSize(next);
+    showToast(t.fontSizeUpdated);
+  };
+
+  const isGroupDrag = (e: React.DragEvent<HTMLElement>) =>
+    e.dataTransfer.types.includes(GROUP_DND_TYPE) || draggingGroupId !== null;
+
   const closeForms = () => {
     setCatPanel("none");
     setShowGroupAdd(false);
@@ -869,6 +962,8 @@ export default function App() {
     setRenameInput("");
     setDraggingCat(null);
     setDropCat(null);
+    setDraggingGroupId(null);
+    setDropGroupItem(null);
   };
 
   const toggleCatPanel = (panel: "add" | "edit") => {
@@ -1182,11 +1277,11 @@ export default function App() {
     }
   };
 
-  const openAddCmdForm = () => {
+  const openAddCmdForm = (groupId?: string) => {
     setTitleInput("");
     setNoteInput("");
     setCommandInput("");
-    setGroupSelect(UNGROUPED_KEY);
+    setGroupSelect(groupId ?? UNGROUPED_KEY);
     setCmdForm({ mode: "add" });
     setCatPanel("none");
     setShowGroupAdd(false);
@@ -1295,6 +1390,10 @@ export default function App() {
   };
 
   const handleCardDragOver = (e: React.DragEvent<HTMLElement>, item: CommandItem) => {
+    if (isGroupDrag(e)) {
+      setDropItem(null);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
@@ -1311,6 +1410,7 @@ export default function App() {
   };
 
   const handleCardDrop = (e: React.DragEvent<HTMLElement>, item: CommandItem) => {
+    if (isGroupDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     const id = e.dataTransfer.getData("text/plain") || draggingId;
@@ -1343,6 +1443,101 @@ export default function App() {
           : t.movedToUngrouped,
       );
     }
+  };
+
+  const clearGroupDragState = () => {
+    setDraggingGroupId(null);
+    setDropGroupItem(null);
+  };
+
+  const handleGroupDragStart = (e: React.DragEvent<HTMLElement>, id: string) => {
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData(GROUP_DND_TYPE, id);
+    e.dataTransfer.setData("text/plain", `group:${id}`);
+    clearDragState();
+    setDraggingGroupId(id);
+    setDropGroupItem(null);
+  };
+
+  const handleGroupDragOver = (e: React.DragEvent<HTMLElement>, targetId: string) => {
+    if (targetId === UNGROUPED_KEY) {
+      setDropGroupItem(null);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    setDropGroupItem(draggingGroupId === targetId ? null : { id: targetId, position });
+  };
+
+  const handleGroupDragLeave = (e: React.DragEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setDropGroupItem(null);
+    }
+  };
+
+  const reorderItemsForGroupOrder = (
+    prev: CommandItem[],
+    nextGroups: GroupItem[],
+    category: Category,
+  ) => {
+    const indexes: number[] = [];
+    prev.forEach((item, index) => {
+      if (item.category === category) indexes.push(index);
+    });
+    if (indexes.length === 0) return prev;
+
+    const ranks = new Map<string, number>();
+    nextGroups
+      .filter((group) => group.category === category)
+      .forEach((group, index) => ranks.set(group.id, index));
+
+    const sorted = indexes
+      .map((index) => prev[index])
+      .sort((a, b) => {
+        const rankA = a.groupId ? (ranks.get(a.groupId) ?? -1) : -1;
+        const rankB = b.groupId ? (ranks.get(b.groupId) ?? -1) : -1;
+        return rankA - rankB;
+      });
+
+    const next = [...prev];
+    indexes.forEach((index, i) => {
+      next[index] = sorted[i];
+    });
+    return next;
+  };
+
+  const handleGroupDrop = (e: React.DragEvent<HTMLElement>, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const raw =
+      e.dataTransfer.getData(GROUP_DND_TYPE) || e.dataTransfer.getData("text/plain");
+    const id = raw.startsWith("group:") ? raw.slice("group:".length) : raw || draggingGroupId;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    clearGroupDragState();
+
+    if (!id || id === targetId || targetId === UNGROUPED_KEY) return;
+    const sourceGroup = groups.find((group) => group.id === id);
+    const targetGroup = groups.find((group) => group.id === targetId);
+    if (!sourceGroup || !targetGroup || sourceGroup.category !== targetGroup.category) {
+      return;
+    }
+
+    const next = [...groups];
+    const from = next.findIndex((group) => group.id === id);
+    if (from < 0) return;
+    const [moved] = next.splice(from, 1);
+    const targetIndex = next.findIndex((group) => group.id === targetId);
+    if (targetIndex < 0) return;
+    next.splice(position === "before" ? targetIndex : targetIndex + 1, 0, moved);
+
+    setGroups(next);
+    setItems((prev) => reorderItemsForGroupOrder(prev, next, sourceGroup.category));
+    showToast(t.groupOrderUpdated);
   };
 
   const confirmTitle =
@@ -1457,14 +1652,37 @@ export default function App() {
     expanded: boolean,
     onToggle: () => void,
     extra?: React.ReactNode,
+    group?: GroupItem,
   ) => (
     <section
-      className={`group-section${dropTarget === key ? " drop-active" : ""}`}
-      onDragOver={(e) => handleDragOver(e, key)}
-      onDragLeave={handleDragLeave}
-      onDrop={(e) => handleDrop(e, key)}
+      className={`group-section${dropTarget === key ? " drop-active" : ""}${
+        draggingGroupId === key ? " is-dragging" : ""
+      }${dropGroupItem?.id === key ? ` drop-${dropGroupItem.position}` : ""}`}
+      onDragOver={(e) =>
+        isGroupDrag(e) ? handleGroupDragOver(e, key) : handleDragOver(e, key)
+      }
+      onDragLeave={(e) =>
+        draggingGroupId !== null ? handleGroupDragLeave(e) : handleDragLeave(e)
+      }
+      onDrop={(e) =>
+        isGroupDrag(e) ? handleGroupDrop(e, key) : handleDrop(e, key)
+      }
     >
       <header className="group-header">
+        {group && (
+          <span
+            className="drag-handle group-drag"
+            draggable
+            onDragStart={(e) => handleGroupDragStart(e, group.id)}
+            onDragEnd={clearGroupDragState}
+            title={t.dragSort}
+            aria-label={fmt(t.dragSortItem, { name: title })}
+            role="button"
+            tabIndex={0}
+          >
+            ⠿
+          </span>
+        )}
         <button
           type="button"
           className="group-collapse"
@@ -1494,12 +1712,17 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="brand">
-          <img className="brand-logo" src={appIcon} alt="" aria-hidden="true" />
-          <div>
-            <p>{t.tagline}</p>
-          </div>
-        </div>
+        <input
+          type="range"
+          className="opacity-slider"
+          min={40}
+          max={100}
+          step={5}
+          value={opacity}
+          onChange={(e) => setOpacity(Number(e.target.value))}
+          title={`${t.opacity}：${opacity}%`}
+          aria-label={t.opacity}
+        />
         <button
           type="button"
           className={`icon-btn pin-btn${alwaysOnTop ? " is-pinned" : ""}`}
@@ -1564,35 +1787,119 @@ export default function App() {
                   </button>
                 </div>
               </div>
+              <div className="menu-section">
+                <div className="menu-section-title">{t.fontSize}</div>
+                <div
+                  className="menu-choices menu-choices--three"
+                  role="group"
+                  aria-label={t.fontSize}
+                >
+                  <button
+                    type="button"
+                    className={`menu-choice${fontSize === "small" ? " is-selected" : ""}`}
+                    aria-pressed={fontSize === "small"}
+                    onClick={() => chooseFontSize("small")}
+                  >
+                    {t.fontSmall}
+                  </button>
+                  <button
+                    type="button"
+                    className={`menu-choice${fontSize === "medium" ? " is-selected" : ""}`}
+                    aria-pressed={fontSize === "medium"}
+                    onClick={() => chooseFontSize("medium")}
+                  >
+                    {t.fontMedium}
+                  </button>
+                  <button
+                    type="button"
+                    className={`menu-choice${fontSize === "large" ? " is-selected" : ""}`}
+                    aria-pressed={fontSize === "large"}
+                    onClick={() => chooseFontSize("large")}
+                  >
+                    {t.fontLarge}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
       </header>
 
-      <div className="search-wrap search-wrap--cat">
-        <span className="search-icon" aria-hidden="true">
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
+      {categoriesCollapsed ? (
+        <div className="category-collapsed-bar">
+          <select
+            className="category-collapsed-select"
+            value={activeTab}
+            onChange={(e) => {
+              setActiveTab(e.target.value);
+              setCategoryQuery("");
+              closeForms();
+            }}
+            aria-label={t.category}
           >
-            <path d="M5 7h14M5 12h14M5 17h9" />
-          </svg>
-        </span>
-        <input
-          ref={categorySearchRef}
-          type="search"
-          className="search-input"
-          placeholder={t.searchCategory}
-          value={categoryQuery}
-          onChange={(e) => setCategoryQuery(e.target.value)}
-          aria-label={t.searchCategory}
-        />
-      </div>
+            {categories.length === 0 ? (
+              <option value="">{t.noCategories}</option>
+            ) : (
+              categories.map((cat) => (
+                <option key={cat.name} value={cat.name}>
+                  {cat.locked ? `${cat.name} · ${t.locked}` : cat.name}
+                </option>
+              ))
+            )}
+          </select>
+          <button
+            type="button"
+            className="category-collapse-btn"
+            onClick={() => setCategoriesCollapsed(false)}
+            title={t.expandCategories}
+            aria-label={t.expandCategories}
+            aria-expanded={false}
+          >
+            <span className="category-collapse-icon" aria-hidden="true">
+              ▾
+            </span>
+          </button>
+        </div>
+      ) : (
+        <div className="category-area">
+          <div className="category-search-row">
+            <div className="search-wrap search-wrap--cat">
+              <span className="search-icon" aria-hidden="true">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M5 7h14M5 12h14M5 17h9" />
+                </svg>
+              </span>
+              <input
+                ref={categorySearchRef}
+                type="search"
+                className="search-input"
+                placeholder={t.searchCategory}
+                value={categoryQuery}
+                onChange={(e) => setCategoryQuery(e.target.value)}
+                aria-label={t.searchCategory}
+              />
+            </div>
+            <button
+              type="button"
+              className="category-collapse-btn"
+              onClick={() => setCategoriesCollapsed(true)}
+              title={t.collapseCategories}
+              aria-label={t.collapseCategories}
+              aria-expanded={true}
+            >
+              <span className="category-collapse-icon" aria-hidden="true">
+                ▴
+              </span>
+            </button>
+          </div>
 
       <div className="category-actions">
         <button
@@ -1783,60 +2090,62 @@ export default function App() {
         </div>
       )}
 
-      <div className="tabs-row">
-        <button
-          type="button"
-          className="tab-scroll"
-          onClick={() => scrollTabs(-1)}
-          disabled={!scrollState.left}
-          aria-label={t.scrollLeft}
-        >
-          ‹
-        </button>
-        <nav
-          className="tabs"
-          ref={tabsRef}
-          aria-label={t.categoriesNav}
-          onScroll={updateTabScroll}
-        >
-          {visibleCategories.map((cat) => {
-            const active = activeTab === cat.name;
-            return (
-              <button
-                key={cat.name}
-                type="button"
-                className={`tab${active ? " tab--active" : ""}`}
-                onClick={() => {
-                  setActiveTab(cat.name);
-                  closeForms();
-                }}
-              >
-                {cat.locked && (
-                  <span className="tab-lock" title={t.locked}>
-                    <LockIcon locked />
-                  </span>
-                )}
-                <span>{cat.name}</span>
-                <span className="tab-count">
-                  {categoryCounts.get(cat.name) ?? 0}
-                </span>
-              </button>
-            );
-          })}
-          {normalizedCategoryQuery && visibleCategories.length === 0 && (
-            <span className="tabs-empty">{t.noCategoryMatch}</span>
-          )}
-        </nav>
-        <button
-          type="button"
-          className="tab-scroll"
-          onClick={() => scrollTabs(1)}
-          disabled={!scrollState.right}
-          aria-label={t.scrollRight}
-        >
-          ›
-        </button>
-      </div>
+          <div className="tabs-row">
+            <button
+              type="button"
+              className="tab-scroll"
+              onClick={() => scrollTabs(-1)}
+              disabled={!scrollState.left}
+              aria-label={t.scrollLeft}
+            >
+              ‹
+            </button>
+            <nav
+              className="tabs"
+              ref={tabsRef}
+              aria-label={t.categoriesNav}
+              onScroll={updateTabScroll}
+            >
+              {visibleCategories.map((cat) => {
+                const active = activeTab === cat.name;
+                return (
+                  <button
+                    key={cat.name}
+                    type="button"
+                    className={`tab${active ? " tab--active" : ""}`}
+                    onClick={() => {
+                      setActiveTab(cat.name);
+                      closeForms();
+                    }}
+                  >
+                    {cat.locked && (
+                      <span className="tab-lock" title={t.locked}>
+                        <LockIcon locked />
+                      </span>
+                    )}
+                    <span>{cat.name}</span>
+                    <span className="tab-count">
+                      {categoryCounts.get(cat.name) ?? 0}
+                    </span>
+                  </button>
+                );
+              })}
+              {normalizedCategoryQuery && visibleCategories.length === 0 && (
+                <span className="tabs-empty">{t.noCategoryMatch}</span>
+              )}
+            </nav>
+            <button
+              type="button"
+              className="tab-scroll"
+              onClick={() => scrollTabs(1)}
+              disabled={!scrollState.right}
+              aria-label={t.scrollRight}
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="search-wrap search-wrap--content">
         <span className="search-icon" aria-hidden="true">
@@ -1872,7 +2181,7 @@ export default function App() {
         <button
           type="button"
           className={`action-btn${cmdForm ? " is-active" : ""}`}
-          onClick={openAddCmdForm}
+          onClick={() => openAddCmdForm()}
           disabled={!activeTab}
           title={t.addCommand}
         >
@@ -2034,7 +2343,8 @@ export default function App() {
       )}
 
       <main className="list">
-        {activeCategoryItems.length === 0 ? (
+        {activeCategoryItems.length === 0 &&
+        (normalizedSearch || groupsForActive.length === 0) ? (
           <div className="empty">
             <div className="empty-icon" aria-hidden="true">
               {"{ }"}
@@ -2044,13 +2354,14 @@ export default function App() {
           </div>
         ) : (
           <>
-            {renderSection(
-              UNGROUPED_KEY,
-              t.ungrouped,
-              ungroupedItems,
-              normalizedSearch ? true : !ungroupedCollapsed,
-              () => setUngroupedCollapsed((prev) => !prev),
-            )}
+            {(activeCategoryItems.length > 0 || groupsForActive.length === 0) &&
+              renderSection(
+                UNGROUPED_KEY,
+                t.ungrouped,
+                ungroupedItems,
+                normalizedSearch ? true : !ungroupedCollapsed,
+                () => setUngroupedCollapsed((prev) => !prev),
+              )}
             {groupsForActive.map((group) => {
               const groupItems = activeCategoryItems.filter(
                 (item) => item.groupId === group.id,
@@ -2064,6 +2375,15 @@ export default function App() {
                 normalizedSearch ? true : !group.collapsed,
                 () => toggleGroupCollapse(group.id),
                 <>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => openAddCmdForm(group.id)}
+                    title={fmt(t.addCommandIn, { name: group.name })}
+                    aria-label={fmt(t.addCommandIn, { name: group.name })}
+                  >
+                    <PlusIcon />
+                  </button>
                   <button
                     type="button"
                     className={`icon-btn${renamingGroupId === group.id ? " is-active" : ""}`}
@@ -2083,6 +2403,7 @@ export default function App() {
                     <TrashIcon />
                   </button>
                 </>,
+                group,
               );
             })}
           </>
