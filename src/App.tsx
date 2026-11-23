@@ -716,6 +716,8 @@ export default function App() {
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   const tabsRef = useRef<HTMLElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const codePanRef = useRef<{ x: number; scrollLeft: number; moved: boolean } | null>(null);
+  const suppressCodeClickRef = useRef(false);
 
   const updateTabScroll = () => {
     const el = tabsRef.current;
@@ -1277,6 +1279,34 @@ export default function App() {
     }
   };
 
+  const startCodePan = (e: React.PointerEvent<HTMLElement>) => {
+    const isPanGesture = e.button === 1 || (e.button === 0 && (e.shiftKey || e.altKey));
+    if (!isPanGesture) return;
+    e.preventDefault();
+    suppressCodeClickRef.current = true;
+    codePanRef.current = {
+      x: e.clientX,
+      scrollLeft: e.currentTarget.scrollLeft,
+      moved: false,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const moveCodePan = (e: React.PointerEvent<HTMLElement>) => {
+    const pan = codePanRef.current;
+    if (!pan) return;
+    const dx = e.clientX - pan.x;
+    if (Math.abs(dx) > 3) pan.moved = true;
+    e.currentTarget.scrollLeft = pan.scrollLeft - dx;
+  };
+
+  const endCodePan = (e: React.PointerEvent<HTMLElement>) => {
+    codePanRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
   const openAddCmdForm = (groupId?: string) => {
     setTitleInput("");
     setNoteInput("");
@@ -1605,7 +1635,15 @@ export default function App() {
           <code
             className="cmd-code"
             onMouseDown={() => window.getSelection()?.removeAllRanges()}
+            onPointerDown={startCodePan}
+            onPointerMove={moveCodePan}
+            onPointerUp={endCodePan}
+            onPointerCancel={endCodePan}
             onClick={() => {
+              if (suppressCodeClickRef.current) {
+                suppressCodeClickRef.current = false;
+                return;
+              }
               if (window.getSelection()?.toString()) return;
               void handleCopy(item);
             }}

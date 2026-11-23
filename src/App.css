@@ -1077,7 +1077,8 @@ kbd {
 }
 
 .cmd-code {
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 5px 8px;
   border: 1px solid #1c2b45;
   border-radius: 6px;
@@ -1085,11 +1086,25 @@ kbd {
   color: #a5d0ff;
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: calc(11px * var(--font-scale));
-  text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: copy;
+  cursor: text;
   user-select: text;
   -webkit-user-select: text;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.cmd-code::-webkit-scrollbar {
+  height: 4px;
+}
+
+.cmd-code::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cmd-code::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.35);
 }
 
 .cmd-actions {
