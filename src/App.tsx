@@ -718,6 +718,7 @@ export default function App() {
   const groupRef = useRef<HTMLInputElement | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   const tabsRef = useRef<HTMLElement | null>(null);
+  const listRef = useRef<HTMLElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codePanRef = useRef<{ x: number; scrollLeft: number; moved: boolean } | null>(null);
   const suppressCodeClickRef = useRef(false);
@@ -788,6 +789,82 @@ export default function App() {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [categoriesCollapsed]);
+
+  useEffect(() => {
+    if (draggingId === null && draggingGroupId === null && draggingCat === null) return;
+
+    let frame = 0;
+    let pointerX = 0;
+    let pointerY = 0;
+
+    const onDragOver = (e: DragEvent) => {
+      pointerX = e.clientX;
+      pointerY = e.clientY;
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      const tabs = tabsRef.current;
+      const target = e.target instanceof Element ? e.target : null;
+      if (tabs && target?.closest(".tabs")) {
+        e.preventDefault();
+        if (getComputedStyle(tabs).flexDirection === "column") {
+          tabs.scrollTop += e.deltaY;
+        } else {
+          tabs.scrollLeft += e.deltaY;
+        }
+        return;
+      }
+
+      const list = listRef.current;
+      if (!list) return;
+      e.preventDefault();
+      list.scrollTop += e.deltaY;
+    };
+
+    const step = () => {
+      const edge = 64;
+
+      const list = listRef.current;
+      if (list && pointerY > 0) {
+        const rect = list.getBoundingClientRect();
+        if (pointerY < rect.top + edge) {
+          list.scrollTop -= Math.max(2, Math.round((rect.top + edge - pointerY) / 4));
+        } else if (pointerY > rect.bottom - edge) {
+          list.scrollTop += Math.max(2, Math.round((pointerY - (rect.bottom - edge)) / 4));
+        }
+      }
+
+      const tabs = tabsRef.current;
+      if (tabs && pointerX > 0 && pointerY > 0) {
+        const rect = tabs.getBoundingClientRect();
+        if (getComputedStyle(tabs).flexDirection === "column") {
+          if (pointerY < rect.top + edge) {
+            tabs.scrollTop -= Math.max(2, Math.round((rect.top + edge - pointerY) / 4));
+          } else if (pointerY > rect.bottom - edge) {
+            tabs.scrollTop += Math.max(2, Math.round((pointerY - (rect.bottom - edge)) / 4));
+          }
+        } else {
+          if (pointerX < rect.left + edge) {
+            tabs.scrollLeft -= Math.max(2, Math.round((rect.left + edge - pointerX) / 4));
+          } else if (pointerX > rect.right - edge) {
+            tabs.scrollLeft += Math.max(2, Math.round((pointerX - (rect.right - edge)) / 4));
+          }
+        }
+      }
+
+      frame = requestAnimationFrame(step);
+    };
+
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    frame = requestAnimationFrame(step);
+
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("wheel", onWheel);
+      cancelAnimationFrame(frame);
+    };
+  }, [draggingCat, draggingId, draggingGroupId]);
 
   useEffect(() => {
     const query = categoryQuery.trim().toLowerCase();
@@ -2394,7 +2471,7 @@ export default function App() {
         </form>
       )}
 
-      <main className="list">
+      <main className="list" ref={listRef}>
         {activeCategoryItems.length === 0 &&
         (normalizedSearch || groupsForActive.length === 0) ? (
           <div className="empty">

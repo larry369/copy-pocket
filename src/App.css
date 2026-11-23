@@ -170,6 +170,7 @@ input:focus-visible {
 
 .command-area {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
@@ -491,7 +492,7 @@ kbd {
   top: 50%;
   right: 12px;
   color: var(--muted);
-  font-size: calc(11px * var(--font-scale));
+  font-size: calc(14px * var(--font-scale));
   line-height: 1;
   transform: translateY(-50%);
   pointer-events: none;
@@ -1330,6 +1331,7 @@ kbd {
 
   .category-area .tabs-row {
     flex: 1;
+    align-items: stretch;
     min-height: 0;
   }
 
