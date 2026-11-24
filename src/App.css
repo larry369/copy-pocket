@@ -903,6 +903,10 @@ kbd {
   margin: 0 0 4px 0;
 }
 
+.list-actions-title {
+  margin-left: auto;
+}
+
 .manage-row .is-locked {
   color: #fbbf24;
 }
@@ -1079,6 +1083,21 @@ kbd {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cmd-card.hide-cmd-title .cmd-title-row {
+  display: none;
+}
+
+.cmd-card.hide-cmd-title:hover .cmd-title-row,
+.cmd-card.hide-cmd-title:focus-within .cmd-title-row {
+  display: flex;
+}
+
+@media (hover: none) {
+  .cmd-card.hide-cmd-title .cmd-title-row {
+    display: flex;
+  }
 }
 
 .drag-handle {

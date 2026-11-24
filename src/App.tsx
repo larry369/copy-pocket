@@ -56,6 +56,7 @@ const STORAGE_LANG_KEY = "command_pocket_lang_v1";
 const STORAGE_FONT_SIZE_KEY = "command_pocket_font_size_v1";
 const STORAGE_OPACITY_KEY = "command_pocket_opacity_v1";
 const STORAGE_CATEGORIES_COLLAPSED_KEY = "command_pocket_categories_collapsed_v1";
+const STORAGE_CMD_TITLES_KEY = "command_pocket_cmd_titles_v1";
 const GROUP_DND_TYPE = "application/x-command-pocket-group";
 
 const DEFAULT_COMMANDS: CommandItem[] = [
@@ -292,6 +293,14 @@ function loadCategoriesCollapsed(): boolean {
     return localStorage.getItem(STORAGE_CATEGORIES_COLLAPSED_KEY) === "1";
   } catch {
     return false;
+  }
+}
+
+function loadCmdTitles(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_CMD_TITLES_KEY) !== "0";
+  } catch {
+    return true;
   }
 }
 
@@ -644,6 +653,15 @@ function PlusIcon() {
   );
 }
 
+function TitleIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <Icon>
+      <path d="M5 6h14M12 6v12M9 18h6" />
+      {hidden && <path d="M4 4l16 16" />}
+    </Icon>
+  );
+}
+
 function LockIcon({ locked }: { locked: boolean }) {
   return (
     <Icon>
@@ -679,6 +697,7 @@ export default function App() {
   const [fontSize, setFontSize] = useState<FontSize>(loadFontSize);
   const [opacity, setOpacity] = useState(loadOpacity);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(loadCategoriesCollapsed);
+  const [cmdTitlesVisible, setCmdTitlesVisible] = useState(loadCmdTitles);
   const [isWide, setIsWide] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 900px)").matches,
   );
@@ -961,6 +980,12 @@ export default function App() {
       );
     } catch {}
   }, [categoriesCollapsed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_CMD_TITLES_KEY, cmdTitlesVisible ? "1" : "0");
+    } catch {}
+  }, [cmdTitlesVisible]);
 
   useEffect(() => {
     const query = window.matchMedia("(min-width: 900px)");
@@ -1701,7 +1726,7 @@ export default function App() {
     return (
       <article
         key={item.id}
-        className={`cmd-card${draggingId === item.id ? " is-dragging" : ""}${isCopied ? " is-copied" : ""}${dropItem?.id === item.id ? ` drop-${dropItem.position}` : ""}`}
+        className={`cmd-card${draggingId === item.id ? " is-dragging" : ""}${isCopied ? " is-copied" : ""}${cmdTitlesVisible ? "" : " hide-cmd-title"}${dropItem?.id === item.id ? ` drop-${dropItem.position}` : ""}`}
         onDragOver={(e) => handleCardDragOver(e, item)}
         onDragLeave={(e) => handleCardDragLeave(e, item)}
         onDrop={(e) => handleCardDrop(e, item)}
@@ -2337,6 +2362,16 @@ export default function App() {
         >
           <PlusIcon />
           <span>{t.group}</span>
+        </button>
+        <button
+          type="button"
+          className={`action-btn list-actions-title${cmdTitlesVisible ? " is-active" : ""}`}
+          onClick={() => setCmdTitlesVisible((prev) => !prev)}
+          title={cmdTitlesVisible ? undefined : t.commandTitle}
+          aria-label={t.commandTitle}
+          aria-pressed={cmdTitlesVisible}
+        >
+          <TitleIcon hidden={!cmdTitlesVisible} />
         </button>
       </div>
 
