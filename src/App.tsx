@@ -327,6 +327,7 @@ const zhTW = {
   expandMini: "展開完整視窗",
   minimizeWindow: "縮小視窗",
   closeWindow: "關閉視窗",
+  moveWindow: "拖曳移動視窗",
   theme: "主題",
   dark: "深色",
   light: "淺色",
@@ -461,6 +462,7 @@ const en: Strings = {
   expandMini: "Expand full window",
   minimizeWindow: "Minimize window",
   closeWindow: "Close window",
+  moveWindow: "Drag to move window",
   theme: "Theme",
   dark: "Dark",
   light: "Light",
@@ -2024,10 +2026,11 @@ export default function App() {
         }}
       >
         <div className="mini-shell">
-          <div className="mini-capsule" onPointerDown={startWindowDrag}>
-            <span className="mini-drag" data-tauri-drag-region aria-hidden="true" />
+          <div className="mini-capsule" data-tauri-drag-region onPointerDown={startWindowDrag}>
+            <span className="mini-drag" data-tauri-drag-region title={t.moveWindow} />
             <button
               type="button"
+              data-tauri-drag-region="false"
               className="mini-name"
               onClick={() => setMiniCategoryOpen((prev) => !prev)}
               title={activeTab || t.noCategories}
@@ -2041,6 +2044,7 @@ export default function App() {
             </button>
             <button
               type="button"
+              data-tauri-drag-region="false"
               className={`icon-btn mini-btn${alwaysOnTop ? " is-pinned" : ""}`}
               onClick={() => void toggleAlwaysOnTop()}
               title={`${t.pinWindow}：${alwaysOnTop ? t.pinOn : t.pinOff}`}
@@ -2051,6 +2055,7 @@ export default function App() {
             </button>
             <button
               type="button"
+              data-tauri-drag-region="false"
               className="icon-btn mini-btn"
               onClick={() => void exitMiniMode()}
               title={t.expandMini}
@@ -2060,6 +2065,7 @@ export default function App() {
             </button>
             <button
               type="button"
+              data-tauri-drag-region="false"
               className="icon-btn mini-btn"
               onClick={() => void minimizeWindow()}
               title={t.minimizeWindow}
@@ -2069,6 +2075,7 @@ export default function App() {
             </button>
             <button
               type="button"
+              data-tauri-drag-region="false"
               className="icon-btn mini-btn icon-btn--danger"
               onClick={() => void closeWindow()}
               title={t.closeWindow}

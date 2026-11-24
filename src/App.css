@@ -1448,10 +1448,19 @@ kbd {
 }
 
 .mini-drag {
-  width: 10px;
-  height: 24px;
+  width: 26px;
+  height: 32px;
   flex: none;
+  border-radius: 10px;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.42) 1px, transparent 1.3px);
+  background-position: center;
+  background-repeat: repeat;
+  background-size: 6px 6px;
   cursor: grab;
+}
+
+.mini-drag:active {
+  cursor: grabbing;
 }
 
 .mini-btn {
