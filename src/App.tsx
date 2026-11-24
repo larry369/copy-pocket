@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 
 type Category = string;
 
@@ -58,6 +58,8 @@ const STORAGE_OPACITY_KEY = "command_pocket_opacity_v1";
 const STORAGE_CATEGORIES_COLLAPSED_KEY = "command_pocket_categories_collapsed_v1";
 const STORAGE_CMD_TITLES_KEY = "command_pocket_cmd_titles_v1";
 const GROUP_DND_TYPE = "application/x-command-pocket-group";
+const MINI_COLLAPSED_SIZE = { width: 200, height: 44 };
+const MINI_EXPANDED_SIZE = { width: 200, height: 420 };
 
 const DEFAULT_COMMANDS: CommandItem[] = [
   {
@@ -319,6 +321,10 @@ const zhTW = {
   pinOff: "未固定",
   expandLayout: "展開左右視窗模式",
   collapseLayout: "縮回單一視窗模式",
+  toggleMiniMode: "迷你懸浮模式",
+  miniModeOn: "已切換迷你懸浮模式",
+  miniModeOff: "已離開迷你懸浮模式",
+  expandMini: "展開完整視窗",
   theme: "主題",
   dark: "深色",
   light: "淺色",
@@ -447,6 +453,10 @@ const en: Strings = {
   pinOff: "Not pinned",
   expandLayout: "Expand to split view",
   collapseLayout: "Collapse to single view",
+  toggleMiniMode: "Mini floating mode",
+  miniModeOn: "Mini floating mode enabled",
+  miniModeOff: "Mini floating mode disabled",
+  expandMini: "Expand full window",
   theme: "Theme",
   dark: "Dark",
   light: "Light",
@@ -671,6 +681,26 @@ function LayoutIcon({ split }: { split: boolean }) {
   );
 }
 
+function MiniIcon() {
+  return (
+    <Icon>
+      <rect x="2" y="8" width="20" height="8" rx="4" />
+      <path d="M7 12h.01M10 12h.01" />
+    </Icon>
+  );
+}
+
+function ExpandMiniIcon() {
+  return (
+    <Icon>
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+      <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+    </Icon>
+  );
+}
+
 function LockIcon({ locked }: { locked: boolean }) {
   return (
     <Icon>
@@ -711,6 +741,10 @@ export default function App() {
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 900px)").matches,
   );
   const [layoutOverride, setLayoutOverride] = useState<"split" | "single" | null>(null);
+  const [miniMode, setMiniMode] = useState(false);
+  const [miniHover, setMiniHover] = useState(false);
+  const [miniCategoryOpen, setMiniCategoryOpen] = useState(false);
+  const miniPanelOpen = miniHover || miniCategoryOpen;
   const isWide = layoutOverride === null ? isWideViewport : layoutOverride === "split";
   const t = I18N[lang];
   const [showGroupAdd, setShowGroupAdd] = useState(false);
@@ -752,6 +786,12 @@ export default function App() {
   const codePanRef = useRef<{ x: number; scrollLeft: number; moved: boolean } | null>(null);
   const suppressCodeClickRef = useRef(false);
   const collapseWidthRef = useRef<number | null>(null);
+  const normalBoundsRef = useRef<{
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_CATS_KEY, JSON.stringify(categories));
@@ -946,6 +986,10 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    document.documentElement.dataset.view = miniMode ? "mini" : "normal";
+  }, [miniMode]);
+
+  useEffect(() => {
     document.documentElement.lang = lang === "en" ? "en" : "zh-Hant";
     try {
       localStorage.setItem(STORAGE_LANG_KEY, lang);
@@ -1049,6 +1093,67 @@ export default function App() {
       await getCurrentWindow().setSize(new LogicalSize(width, height));
     } catch {}
   };
+
+  const applyWindowBounds = async (
+    width: number,
+    height: number,
+    anchorRight: boolean,
+    pos?: { x: number; y: number },
+  ) => {
+    if (!isTauri()) return;
+    try {
+      const screenWidth = window.screen?.availWidth || window.innerWidth;
+      const x = anchorRight
+        ? Math.max(0, Math.round(screenWidth - width))
+        : Math.round(pos?.x ?? window.screenX ?? 0);
+      const y = anchorRight ? 0 : Math.round(pos?.y ?? window.screenY ?? 0);
+      const win = getCurrentWindow();
+      await win.setSize(new LogicalSize(width, height));
+      await win.setPosition(new LogicalPosition(x, y));
+    } catch {}
+  };
+
+  const setWindowSize = async (width: number, height: number) => {
+    if (!isTauri()) return;
+    try {
+      await getCurrentWindow().setSize(new LogicalSize(width, height));
+    } catch {}
+  };
+
+  const enterMiniMode = async () => {
+    if (isTauri()) {
+      normalBoundsRef.current = {
+        width: window.outerWidth || window.innerWidth,
+        height: window.outerHeight || window.innerHeight,
+        x: window.screenX ?? 0,
+        y: window.screenY ?? 0,
+      };
+    }
+    setMenuOpen(false);
+    setMiniMode(true);
+    setMiniHover(false);
+    setMiniCategoryOpen(false);
+    showToast(t.miniModeOn);
+    await setWindowSize(MINI_COLLAPSED_SIZE.width, MINI_COLLAPSED_SIZE.height);
+  };
+
+  const exitMiniMode = async () => {
+    setMiniMode(false);
+    setMiniHover(false);
+    setMiniCategoryOpen(false);
+    showToast(t.miniModeOff);
+    const bounds = normalBoundsRef.current;
+    if (bounds) {
+      await applyWindowBounds(bounds.width, bounds.height, false, bounds);
+      normalBoundsRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (!miniMode) return;
+    const size = miniPanelOpen ? MINI_EXPANDED_SIZE : MINI_COLLAPSED_SIZE;
+    void setWindowSize(size.width, size.height);
+  }, [miniMode, miniPanelOpen]);
 
   const chooseTheme = (next: Theme) => {
     setMenuOpen(false);
@@ -1874,6 +1979,110 @@ export default function App() {
     </section>
   );
 
+  if (miniMode) {
+    const miniItems = items.filter((item) => item.category === activeTab);
+    return (
+      <div
+        className={`mini-root${miniPanelOpen ? " is-expanded" : ""}`}
+        onMouseEnter={() => setMiniHover(true)}
+        onMouseLeave={() => {
+          setMiniHover(false);
+          setMiniCategoryOpen(false);
+        }}
+      >
+        <div className="mini-shell">
+          <div className="mini-capsule">
+            <button
+              type="button"
+              className="mini-name"
+              onClick={() => setMiniCategoryOpen((prev) => !prev)}
+              title={activeTab || t.noCategories}
+              aria-label={activeTab || t.noCategories}
+              aria-expanded={miniCategoryOpen}
+            >
+              <span className="mini-name-text">{activeTab || t.noCategories}</span>
+              <span className="mini-chevron" aria-hidden="true">
+                ▾
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`icon-btn mini-btn${alwaysOnTop ? " is-pinned" : ""}`}
+              onClick={() => void toggleAlwaysOnTop()}
+              title={`${t.pinWindow}：${alwaysOnTop ? t.pinOn : t.pinOff}`}
+              aria-label={`${t.pinWindow}：${alwaysOnTop ? t.pinOn : t.pinOff}`}
+              aria-pressed={alwaysOnTop}
+            >
+              <PinIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-btn mini-btn"
+              onClick={() => void exitMiniMode()}
+              title={t.expandMini}
+              aria-label={t.expandMini}
+            >
+              <ExpandMiniIcon />
+            </button>
+          </div>
+          {miniPanelOpen && (
+            <div className="mini-panel">
+              {miniCategoryOpen ? (
+                <div className="mini-menu">
+                  {categories.length === 0 ? (
+                    <div className="mini-empty">{t.noCategories}</div>
+                  ) : (
+                    categories.map((cat) => (
+                      <button
+                        key={cat.name}
+                        type="button"
+                        className={`mini-menu-item${cat.name === activeTab ? " is-active" : ""}`}
+                        onClick={() => {
+                          setActiveTab(cat.name);
+                          setCategoryQuery("");
+                          closeForms();
+                          setMiniCategoryOpen(false);
+                        }}
+                      >
+                        {cat.locked && (
+                          <span className="tab-lock">
+                            <LockIcon locked />
+                          </span>
+                        )}
+                        <span className="mini-menu-name">{cat.name}</span>
+                        <span className="mini-menu-count">
+                          {categoryCounts.get(cat.name) ?? 0}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : miniItems.length === 0 ? (
+                <div className="mini-empty">
+                  {fmt(t.noCommandsIn, { name: activeTab })}
+                </div>
+              ) : (
+                miniItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`mini-row${copiedId === item.id ? " is-copied" : ""}`}
+                    onClick={() => void handleCopy(item)}
+                  >
+                    {cmdTitlesVisible && item.title && (
+                      <span className="mini-row-title">{item.title}</span>
+                    )}
+                    <span className="mini-row-code">{item.command}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app" data-layout={isWide ? "split" : "single"}>
       <header className="app-header">
@@ -1907,6 +2116,15 @@ export default function App() {
           aria-pressed={isWide}
         >
           <LayoutIcon split={isWide} />
+        </button>
+        <button
+          type="button"
+          className={`icon-btn${miniMode ? " is-active" : ""}`}
+          onClick={() => void enterMiniMode()}
+          title={t.toggleMiniMode}
+          aria-label={t.toggleMiniMode}
+        >
+          <MiniIcon />
         </button>
         <div className="menu-wrap">
           <button
