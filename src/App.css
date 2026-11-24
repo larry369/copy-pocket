@@ -1104,10 +1104,16 @@ kbd {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+.cmd-code-wrap {
+  position: relative;
+  min-width: 0;
+}
+
 .cmd-code {
+  display: block;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 5px 8px;
+  padding: 5px 32px 5px 8px;
   border: 1px solid #3a3a3a;
   border-radius: 6px;
   background: #141414;
@@ -1119,6 +1125,11 @@ kbd {
   user-select: text;
   -webkit-user-select: text;
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.cmd-code:hover,
+.cmd-code-wrap:focus-within .cmd-code {
   scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 }
 
@@ -1132,7 +1143,40 @@ kbd {
 
 .cmd-code::-webkit-scrollbar-thumb {
   border-radius: 4px;
+  background: transparent;
+}
+
+.cmd-code:hover::-webkit-scrollbar-thumb,
+.cmd-code-wrap:focus-within .cmd-code::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.35);
+}
+
+.cmd-copy {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border-color: var(--border);
+  background: var(--panel);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.cmd-code-wrap:hover .cmd-copy,
+.cmd-code-wrap:focus-within .cmd-copy,
+.cmd-card.is-copied .cmd-copy {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .cmd-copy {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .cmd-actions {

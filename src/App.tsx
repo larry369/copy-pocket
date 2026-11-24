@@ -1720,34 +1720,40 @@ export default function App() {
           <div className="cmd-title-row">
             <span className="cmd-title">{item.title}</span>
           </div>
-          <code
-            className="cmd-code"
-            onMouseDown={() => window.getSelection()?.removeAllRanges()}
-            onPointerDown={startCodePan}
-            onPointerMove={moveCodePan}
-            onPointerUp={endCodePan}
-            onPointerCancel={endCodePan}
-            onClick={() => {
-              if (suppressCodeClickRef.current) {
-                suppressCodeClickRef.current = false;
-                return;
-              }
-              if (window.getSelection()?.toString()) return;
-              void handleCopy(item);
-            }}
-          >
-            {item.command}
-          </code>
+          <div className="cmd-code-wrap">
+            <code
+              className="cmd-code"
+              onMouseDown={() => window.getSelection()?.removeAllRanges()}
+              onPointerDown={startCodePan}
+              onPointerMove={moveCodePan}
+              onPointerUp={endCodePan}
+              onPointerCancel={endCodePan}
+              onClick={() => {
+                if (suppressCodeClickRef.current) {
+                  suppressCodeClickRef.current = false;
+                  return;
+                }
+                if (window.getSelection()?.toString()) return;
+                void handleCopy(item);
+              }}
+            >
+              {item.command}
+            </code>
+            <button
+              type="button"
+              className={`icon-btn cmd-copy${isCopied ? " icon-btn--copied" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleCopy(item);
+              }}
+              title={isCopied ? t.copied : t.copy}
+              aria-label={isCopied ? t.copied : t.copy}
+            >
+              {isCopied ? <CheckIcon /> : <CopyIcon />}
+            </button>
+          </div>
         </div>
         <div className="cmd-actions">
-          <button
-            type="button"
-            className={`icon-btn${isCopied ? " icon-btn--copied" : ""}`}
-            onClick={() => handleCopy(item)}
-            aria-label={isCopied ? t.copied : t.copy}
-          >
-            {isCopied ? <CheckIcon /> : <CopyIcon />}
-          </button>
           <button
             type="button"
             className="icon-btn"
