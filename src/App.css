@@ -1277,7 +1277,7 @@ kbd {
 
 .modal-backdrop {
   position: fixed;
-  z-index: 10;
+  z-index: 20;
   inset: 0;
   display: grid;
   place-items: center;
