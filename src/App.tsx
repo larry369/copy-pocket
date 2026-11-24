@@ -371,8 +371,6 @@ const zhTW = {
   locked: "已鎖定",
   searchCategory: "搜尋分類",
   noCategoryMatch: "找不到符合的分類",
-  scrollLeft: "向左捲動分類",
-  scrollRight: "向右捲動分類",
   categoriesNav: "指令分類",
   collapseCategories: "收合上方分類",
   expandCategories: "展開上方分類",
@@ -499,8 +497,6 @@ const en: Strings = {
   locked: "Locked",
   searchCategory: "Search categories",
   noCategoryMatch: "No matching categories",
-  scrollLeft: "Scroll categories left",
-  scrollRight: "Scroll categories right",
   categoriesNav: "Command categories",
   collapseCategories: "Collapse category tabs",
   expandCategories: "Expand category tabs",
@@ -717,7 +713,6 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<ConfirmTarget | null>(null);
-  const [scrollState, setScrollState] = useState({ left: false, right: false });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dropItem, setDropItem] = useState<{
@@ -741,15 +736,6 @@ export default function App() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codePanRef = useRef<{ x: number; scrollLeft: number; moved: boolean } | null>(null);
   const suppressCodeClickRef = useRef(false);
-
-  const updateTabScroll = () => {
-    const el = tabsRef.current;
-    if (!el) return;
-    setScrollState({
-      left: el.scrollLeft > 2,
-      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2,
-    });
-  };
 
   useEffect(() => {
     localStorage.setItem(STORAGE_CATS_KEY, JSON.stringify(categories));
@@ -782,13 +768,6 @@ export default function App() {
   useEffect(() => {
     if (confirmDialog) confirmRef.current?.focus();
   }, [confirmDialog]);
-
-  useEffect(() => {
-    updateTabScroll();
-    const onResize = () => updateTabScroll();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [categories, categoryQuery, categoriesCollapsed]);
 
   useEffect(() => {
     const el = tabsRef.current;
@@ -1106,10 +1085,6 @@ export default function App() {
     setEditingCategory(name);
     setEditCatName(name);
     setCatError("");
-  };
-
-  const scrollTabs = (direction: -1 | 1) => {
-    tabsRef.current?.scrollBy({ left: direction * 180, behavior: "smooth" });
   };
 
   const normalizedCategoryQuery = categoryQuery.trim().toLowerCase();
@@ -2250,20 +2225,10 @@ export default function App() {
       )}
 
           <div className="tabs-row">
-            <button
-              type="button"
-              className="tab-scroll"
-              onClick={() => scrollTabs(-1)}
-              disabled={!scrollState.left}
-              aria-label={t.scrollLeft}
-            >
-              ‹
-            </button>
             <nav
               className="tabs"
               ref={tabsRef}
               aria-label={t.categoriesNav}
-              onScroll={updateTabScroll}
             >
               {visibleCategories.map((cat) => {
                 const active = activeTab === cat.name;
@@ -2293,15 +2258,6 @@ export default function App() {
                 <span className="tabs-empty">{t.noCategoryMatch}</span>
               )}
             </nav>
-            <button
-              type="button"
-              className="tab-scroll"
-              onClick={() => scrollTabs(1)}
-              disabled={!scrollState.right}
-              aria-label={t.scrollRight}
-            >
-              ›
-            </button>
           </div>
         </div>
       )}
