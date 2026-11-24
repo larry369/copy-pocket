@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 
 type Category = string;
 
@@ -317,6 +317,8 @@ const zhTW = {
   unpinned: "已取消固定畫面",
   pinOn: "已固定",
   pinOff: "未固定",
+  expandLayout: "展開左右視窗模式",
+  collapseLayout: "縮回單一視窗模式",
   theme: "主題",
   dark: "深色",
   light: "淺色",
@@ -443,6 +445,8 @@ const en: Strings = {
   unpinned: "Window unpinned",
   pinOn: "Pinned",
   pinOff: "Not pinned",
+  expandLayout: "Expand to split view",
+  collapseLayout: "Collapse to single view",
   theme: "Theme",
   dark: "Dark",
   light: "Light",
@@ -658,6 +662,15 @@ function TitleIcon({ hidden }: { hidden: boolean }) {
   );
 }
 
+function LayoutIcon({ split }: { split: boolean }) {
+  return (
+    <Icon>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      {!split && <path d="M11 4v16" />}
+    </Icon>
+  );
+}
+
 function LockIcon({ locked }: { locked: boolean }) {
   return (
     <Icon>
@@ -694,9 +707,11 @@ export default function App() {
   const [opacity, setOpacity] = useState(loadOpacity);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(loadCategoriesCollapsed);
   const [cmdTitlesVisible, setCmdTitlesVisible] = useState(loadCmdTitles);
-  const [isWide, setIsWide] = useState(
+  const [isWideViewport, setIsWideViewport] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 900px)").matches,
   );
+  const [layoutOverride, setLayoutOverride] = useState<"split" | "single" | null>(null);
+  const isWide = layoutOverride === null ? isWideViewport : layoutOverride === "split";
   const t = I18N[lang];
   const [showGroupAdd, setShowGroupAdd] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
@@ -736,6 +751,7 @@ export default function App() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codePanRef = useRef<{ x: number; scrollLeft: number; moved: boolean } | null>(null);
   const suppressCodeClickRef = useRef(false);
+  const collapseWidthRef = useRef<number | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_CATS_KEY, JSON.stringify(categories));
@@ -968,8 +984,8 @@ export default function App() {
 
   useEffect(() => {
     const query = window.matchMedia("(min-width: 900px)");
-    const onChange = (e: MediaQueryListEvent) => setIsWide(e.matches);
-    setIsWide(query.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsWideViewport(e.matches);
+    setIsWideViewport(query.matches);
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
   }, []);
@@ -1015,6 +1031,23 @@ export default function App() {
     setAlwaysOnTop(next);
     setMenuOpen(false);
     showToast(next ? t.pinned : t.unpinned);
+  };
+
+  const toggleLayout = async () => {
+    const next = isWide ? "single" : "split";
+    if (next === "split") {
+      collapseWidthRef.current = window.outerWidth || window.innerWidth;
+    }
+    setLayoutOverride(next);
+    showToast(next === "split" ? t.expandLayout : t.collapseLayout);
+
+    if (!isTauri()) return;
+    try {
+      const width =
+        next === "split" ? 1180 : collapseWidthRef.current ?? 760;
+      const height = window.outerHeight || window.innerHeight;
+      await getCurrentWindow().setSize(new LogicalSize(width, height));
+    } catch {}
   };
 
   const chooseTheme = (next: Theme) => {
@@ -1842,7 +1875,7 @@ export default function App() {
   );
 
   return (
-    <div className="app">
+    <div className="app" data-layout={isWide ? "split" : "single"}>
       <header className="app-header">
         <input
           type="range"
@@ -1864,6 +1897,16 @@ export default function App() {
           aria-pressed={alwaysOnTop}
         >
           <PinIcon />
+        </button>
+        <button
+          type="button"
+          className={`icon-btn${isWide ? " is-active" : ""}`}
+          onClick={toggleLayout}
+          title={isWide ? t.collapseLayout : t.expandLayout}
+          aria-label={isWide ? t.collapseLayout : t.expandLayout}
+          aria-pressed={isWide}
+        >
+          <LayoutIcon split={isWide} />
         </button>
         <div className="menu-wrap">
           <button
