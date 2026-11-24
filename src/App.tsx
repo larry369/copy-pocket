@@ -58,8 +58,8 @@ const STORAGE_OPACITY_KEY = "command_pocket_opacity_v1";
 const STORAGE_CATEGORIES_COLLAPSED_KEY = "command_pocket_categories_collapsed_v1";
 const STORAGE_CMD_TITLES_KEY = "command_pocket_cmd_titles_v1";
 const GROUP_DND_TYPE = "application/x-command-pocket-group";
-const MINI_COLLAPSED_SIZE = { width: 200, height: 44 };
-const MINI_EXPANDED_SIZE = { width: 200, height: 420 };
+const MINI_COLLAPSED_SIZE = { width: 220, height: 44 };
+const MINI_EXPANDED_SIZE = { width: 220, height: 420 };
 
 const DEFAULT_COMMANDS: CommandItem[] = [
   {
@@ -325,6 +325,8 @@ const zhTW = {
   miniModeOn: "已切換迷你懸浮模式",
   miniModeOff: "已離開迷你懸浮模式",
   expandMini: "展開完整視窗",
+  minimizeWindow: "縮小視窗",
+  closeWindow: "關閉視窗",
   theme: "主題",
   dark: "深色",
   light: "淺色",
@@ -457,6 +459,8 @@ const en: Strings = {
   miniModeOn: "Mini floating mode enabled",
   miniModeOff: "Mini floating mode disabled",
   expandMini: "Expand full window",
+  minimizeWindow: "Minimize window",
+  closeWindow: "Close window",
   theme: "Theme",
   dark: "Dark",
   light: "Light",
@@ -697,6 +701,14 @@ function ExpandMiniIcon() {
       <path d="M16 3h3a2 2 0 0 1 2 2v3" />
       <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
       <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+    </Icon>
+  );
+}
+
+function MinimizeIcon() {
+  return (
+    <Icon>
+      <path d="M5 12h14" />
     </Icon>
   );
 }
@@ -1004,6 +1016,7 @@ export default function App() {
   }, [fontSize]);
 
   useEffect(() => {
+    document.documentElement.dataset.opaque = String(opacity === 100);
     try {
       localStorage.setItem(STORAGE_OPACITY_KEY, String(opacity));
     } catch {}
@@ -1075,6 +1088,26 @@ export default function App() {
     setAlwaysOnTop(next);
     setMenuOpen(false);
     showToast(next ? t.pinned : t.unpinned);
+  };
+
+  const minimizeWindow = async () => {
+    if (!isTauri()) return;
+    try {
+      await getCurrentWindow().minimize();
+    } catch {}
+  };
+
+  const closeWindow = async () => {
+    if (!isTauri()) return;
+    try {
+      await getCurrentWindow().close();
+    } catch {}
+  };
+
+  const startWindowDrag = (e: React.PointerEvent<HTMLElement>) => {
+    if (!(e.target instanceof Element)) return;
+    if (e.target.closest("button, input, .menu-popover")) return;
+    if (isTauri()) void getCurrentWindow().startDragging().catch(() => {});
   };
 
   const toggleLayout = async () => {
@@ -1991,7 +2024,8 @@ export default function App() {
         }}
       >
         <div className="mini-shell">
-          <div className="mini-capsule">
+          <div className="mini-capsule" onPointerDown={startWindowDrag}>
+            <span className="mini-drag" data-tauri-drag-region aria-hidden="true" />
             <button
               type="button"
               className="mini-name"
@@ -2024,9 +2058,41 @@ export default function App() {
             >
               <ExpandMiniIcon />
             </button>
+            <button
+              type="button"
+              className="icon-btn mini-btn"
+              onClick={() => void minimizeWindow()}
+              title={t.minimizeWindow}
+              aria-label={t.minimizeWindow}
+            >
+              <MinimizeIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-btn mini-btn icon-btn--danger"
+              onClick={() => void closeWindow()}
+              title={t.closeWindow}
+              aria-label={t.closeWindow}
+            >
+              <CloseIcon />
+            </button>
           </div>
           {miniPanelOpen && (
             <div className="mini-panel">
+              <div className="mini-panel-controls">
+                <input
+                  type="range"
+                  className="opacity-slider mini-opacity-slider"
+                  min={40}
+                  max={100}
+                  step={5}
+                  value={opacity}
+                  onChange={(e) => setOpacity(Number(e.target.value))}
+                  title={`${t.opacity}：${opacity}%`}
+                  aria-label={t.opacity}
+                />
+                <span className="mini-opacity-value">{opacity}%</span>
+              </div>
               {miniCategoryOpen ? (
                 <div className="mini-menu">
                   {categories.length === 0 ? (
@@ -2085,7 +2151,8 @@ export default function App() {
 
   return (
     <div className="app" data-layout={isWide ? "split" : "single"}>
-      <header className="app-header">
+      <header className="app-header" onPointerDown={startWindowDrag}>
+        <div className="header-drag" data-tauri-drag-region />
         <input
           type="range"
           className="opacity-slider"
@@ -2109,7 +2176,7 @@ export default function App() {
         </button>
         <button
           type="button"
-          className={`icon-btn${isWide ? " is-active" : ""}`}
+          className={`icon-btn layout-btn${isWide ? " is-active" : ""}`}
           onClick={toggleLayout}
           title={isWide ? t.collapseLayout : t.expandLayout}
           aria-label={isWide ? t.collapseLayout : t.expandLayout}
@@ -2119,7 +2186,7 @@ export default function App() {
         </button>
         <button
           type="button"
-          className={`icon-btn${miniMode ? " is-active" : ""}`}
+          className={`icon-btn mini-mode-btn${miniMode ? " is-active" : ""}`}
           onClick={() => void enterMiniMode()}
           title={t.toggleMiniMode}
           aria-label={t.toggleMiniMode}
@@ -2216,6 +2283,24 @@ export default function App() {
             </div>
           )}
         </div>
+        <button
+          type="button"
+          className="icon-btn window-btn minimize-btn"
+          onClick={() => void minimizeWindow()}
+          title={t.minimizeWindow}
+          aria-label={t.minimizeWindow}
+        >
+          <MinimizeIcon />
+        </button>
+        <button
+          type="button"
+          className="icon-btn icon-btn--danger window-btn close-btn"
+          onClick={() => void closeWindow()}
+          title={t.closeWindow}
+          aria-label={t.closeWindow}
+        >
+          <CloseIcon />
+        </button>
       </header>
 
       {!isWide && categoriesCollapsed ? (
