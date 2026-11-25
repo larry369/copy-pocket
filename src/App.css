@@ -93,7 +93,7 @@
   color: #1d4ed8;
 }
 
-:root[data-theme="light"] .btn:hover {
+:root[data-theme="light"] .btn:hover:not(.btn--primary):not(.btn--danger-solid):not(.btn--copied) {
   border-color: var(--accent);
   background: var(--panel-raised);
 }
@@ -336,7 +336,7 @@ input:focus-visible {
 
 .search-input {
   width: 100%;
-  padding: 8px 70px 8px 34px;
+  padding: 8px 10px 8px 34px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-input);
@@ -353,25 +353,6 @@ input:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(76, 141, 255, 0.14);
   outline: none;
-}
-
-.search-hint {
-  position: absolute;
-  right: 10px;
-  display: flex;
-  gap: 4px;
-  pointer-events: none;
-}
-
-kbd {
-  padding: 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--panel-raised);
-  color: var(--muted);
-  font-family: inherit;
-  font-size: calc(10px * var(--font-scale));
-  line-height: calc(16px * var(--font-scale));
 }
 
 .search-wrap--cat .search-input {
@@ -1298,6 +1279,37 @@ kbd {
   font-size: calc(10px * var(--font-scale));
 }
 
+.brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.brand-mark {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgba(76, 141, 255, 0.5);
+  border-radius: 5px;
+  background: rgba(76, 141, 255, 0.16);
+  color: var(--accent);
+}
+
+.brand-mark svg {
+  width: 11px;
+  height: 11px;
+}
+
+.status-summary {
+  text-align: right;
+}
+
 .toast {
   position: fixed;
   bottom: 16px;
@@ -1679,7 +1691,7 @@ kbd {
 
 .app[data-layout="split"] {
   display: grid;
-  max-width: 1180px;
+  max-width: none;
   grid-template-areas:
     "header header"
     "categories commands"
@@ -1770,10 +1782,6 @@ kbd {
     padding: 10px;
   }
 
-  .search-hint {
-    display: none;
-  }
-
   .cmd-card {
     align-items: flex-start;
     flex-direction: column;
@@ -1782,6 +1790,15 @@ kbd {
 
   .cmd-actions {
     align-self: flex-end;
+  }
+
+  .statusbar {
+    flex-wrap: wrap;
+  }
+
+  .status-summary {
+    width: 100%;
+    text-align: left;
   }
 }
 

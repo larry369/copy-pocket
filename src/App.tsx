@@ -403,7 +403,6 @@ const zhTW = {
   collapseCategories: "收合上方分類",
   expandCategories: "展開上方分類",
   searchCommands: "搜尋目前分類的指令說明或內容",
-  searchShortcut: "Ctrl + K 搜尋",
   addCommand: "新增指令",
   addCommandIn: '在「{name}」新增指令',
   addGroup: "新增群組",
@@ -539,7 +538,6 @@ const en: Strings = {
   collapseCategories: "Collapse category tabs",
   expandCategories: "Expand category tabs",
   searchCommands: "Search command titles or content in this category",
-  searchShortcut: "Ctrl + K to search",
   addCommand: "Add command",
   addCommandIn: 'Add command in "{name}"',
   addGroup: "Add group",
@@ -2735,10 +2733,6 @@ export default function App() {
           onChange={(e) => setSearch(e.target.value)}
           aria-label={t.searchCommands}
         />
-        <div className="search-hint" aria-hidden="true">
-          <kbd>Ctrl</kbd>
-          <kbd>K</kbd>
-        </div>
       </div>
 
       <div className="list-actions">
@@ -2986,7 +2980,13 @@ export default function App() {
       </div>
 
       <footer className="statusbar">
-        <span>
+        <span className="brand" aria-label="copy-pocket">
+          <span className="brand-mark" aria-hidden="true">
+            <CopyIcon />
+          </span>
+          <span>copy-pocket</span>
+        </span>
+        <span className="status-summary">
           {fmt(t.statusSummary, {
             categories: categories.length,
             groups: groupsForActive.length,
@@ -2994,7 +2994,6 @@ export default function App() {
             total: items.length,
           })}
         </span>
-        <span>{t.searchShortcut}</span>
       </footer>
 
       {toast && (
