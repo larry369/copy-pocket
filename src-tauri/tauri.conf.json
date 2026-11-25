@@ -15,6 +15,7 @@
       {
         "title": "copy-pocket",
         "decorations": false,
+        "shadow":false,
         "width": 460,
         "height": 754,
         "minWidth": 460,
