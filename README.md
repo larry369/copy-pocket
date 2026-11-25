@@ -7,7 +7,27 @@ A local snippet and command organizer built with React + Tauri 2. Organize comma
 
 ## 使用說明 / User Guide
 
-### 1. 分類 / Categories
+### 1. 視窗操作 / Window Controls
+
+- 標題列由左至右為：**設定選單**、**透明度滑桿**、**視窗置頂**；右側為：**縮小**、**迷你懸浮模式**、**單／雙欄切換**、**關閉**。
+- 視窗已移除原生邊框，按住標題列空白處即可拖曳移動視窗。
+- **透明度滑桿：** 範圍 `40%–100%`，預設 `100%`；`100%` 為完全不透明，數值越低越能看到後方視窗。迷你模式的展開面板內也有同一個滑桿。
+- **視窗置頂：** 切換是否永遠顯示在最上層。
+- **單／雙欄切換：** 一鍵切換單欄與左右雙欄排版；切換到雙欄時視窗會加寬，切回單欄會恢復原本寬度。
+- **縮小／關閉：** 使用 Windows 原生視窗行為。
+- 視窗相關操作僅在 Tauri 桌面版生效；在瀏覽器 `npm run dev` 中無法控制原生視窗。
+
+---
+
+- The title bar is arranged left to right as **Settings menu**, **Opacity slider**, **Always on top**; on the right are **Minimize**, **Mini floating mode**, **Single/split layout toggle**, and **Close**.
+- The native window border is removed; drag any empty area of the title bar to move the window.
+- **Opacity slider:** `40%–100%`, default `100%`. `100%` is fully opaque; lower values show windows behind it. The same slider is also available inside the expanded mini-mode panel.
+- **Always on top:** Toggle whether the window stays above all other windows.
+- **Single/split layout toggle:** Switch between single-column and side-by-side layouts. Split mode widens the window; returning to single-column restores the previous width.
+- **Minimize / Close:** Use native Windows window behavior.
+- Window controls only work in the Tauri desktop app; native window actions are unavailable in the browser dev server (`npm run dev`).
+
+### 2. 分類 / Categories
 
 - 點上方「+ 分類」建立新分類。
 - 點「編輯」進入分類管理，可：
@@ -16,9 +36,7 @@ A local snippet and command organizer built with React + Tauri 2. Organize comma
   - 鎖定／解鎖分類；鎖定後無法刪除，可避免誤刪。
   - 刪除分類；刪除時該分類的群組與指令會一併刪除，且無法復原。
 - 點分類頁籤切換目前分類；分類搜尋框可過濾頁籤。
-- **響應式排版：**
-  - **寬視窗（`> 900px`）：** 自動變成兩欄排版（左邊垂直分類清單、右邊指令清單），左側固定顯示分類清單，不使用下拉選單，也不會顯示收合按鈕。
-  - **窄視窗（`≤ 900px`）：** 恢復單欄排版。分類搜尋框右側的箭頭可收合／展開上方分類區；收合後會變成下拉選單，可直接切換分類。
+- 單欄模式下可收合分類區；收合後會變成下拉選單，可直接切換分類。
 
 ---
 
@@ -29,40 +47,38 @@ A local snippet and command organizer built with React + Tauri 2. Organize comma
   - Lock/unlock categories (locked categories cannot be deleted, preventing accidental removal).
   - Delete categories (deleting a category permanently removes all groups and commands within it and cannot be undone).
 - Click a category tab to switch to that category, or use the category search box to filter tabs.
-- **Responsive Layout:**
-  - **Wide Window (`> 900px`):** Automatically switches to a two-column layout with a vertical category list on the left and the command list on the right. The sidebar stays permanently visible without a dropdown menu or collapse button.
-  - **Narrow Window (`≤ 900px`):** Restores the single-column layout. Click the arrow to the right of the category search box to collapse or expand the top category area; when collapsed, it turns into a dropdown menu for quick switching.
+- In single-column mode, the category area can be collapsed into a dropdown for quick switching.
 
-### 2. 指令與群組 / Commands & Groups
+### 3. 指令與群組 / Commands & Groups
 
-- 點搜尋列下方的「+ 指令」新增目前分類的指令。標題可留空，說明與指令內容建議填寫。
-- 點「+ 群組」新增群組。
-- 群組標題列的 `+` 可直接在該群組內新增指令，並自動帶入所屬群組。
+- 點搜尋列下方的「+ 指令」新增目前分類的指令；標題可留空，建議填寫說明與指令內容。
+- 點「+ 群組」新增群組；群組標題列的 `+` 可直接在該群組內新增指令，並自動帶入所屬群組。
 - **拖曳排序與移動：**
   - 指令卡片左側的 `⠿` 可拖曳到群組或「未分組」，放開後即完成移動。
-  - 群組標題左側的 `⠿` 可調整群組順序；群組內的指令會跟著一起排序。
-  - 拖曳按住時，游標靠近清單上下邊緣會自動捲動；滑鼠滾輪在拖曳期間也會直接捲動清單或分類頁籤。
-- 群組可收合／展開。即使目前分類還沒有指令，已建立的群組仍會顯示，方便直接加入指令。
+  - 群組標題左側的 `⠿` 可調整群組順序，群組內的指令會跟著一起排序。
+  - 拖曳時游標靠近清單上下邊緣會自動捲動；滾輪也可在拖曳期間捲動清單或分類頁籤。
+- 群組可收合／展開；即使目前分類還沒有指令，已建立的群組仍會顯示。
 - 刪除群組時，群組內的指令會回到「未分組」，不會被刪除。
+- **標題開關：** 可隱藏指令標題讓畫面更簡潔；隱藏後滑過或聚焦卡片仍會顯示標題。
 
 ---
 
 - Click **+ Command** below the search bar to add a command to the current category. The title is optional, though filling in the description and command content is recommended.
-- Click **+ Group** to create a new group.
-- Click the `+` button in a group's header bar to add a command directly to that group with the group pre-selected.
+- Click **+ Group** to create a new group. Click the `+` button in a group's header to add a command directly to that group with the group pre-selected.
 - **Drag & Drop:**
   - Drag the `⠿` handle on the left of a command card to move it into a group or **Ungrouped**, then release to drop.
-  - Drag the `⠿` handle on the left of a group header to reorder groups (commands inside move along with the group).
-  - Moving your cursor near the top or bottom edge of the list while dragging triggers auto-scrolling. You can also use the mouse wheel during a drag to scroll lists or category tabs.
-- Groups can be collapsed or expanded. Empty groups remain visible in the current category so you can easily add commands to them later.
+  - Drag the `⠿` handle on the left of a group header to reorder groups; commands inside move along with the group.
+  - Moving the cursor near the top or bottom edge while dragging triggers auto-scrolling. The mouse wheel also scrolls lists or category tabs during a drag.
+- Groups can be collapsed or expanded; empty groups remain visible in the current category.
 - Deleting a group moves its commands back to **Ungrouped** without deleting them.
+- **Title toggle:** Hide command titles for a cleaner view. Hidden titles still appear on hover or focus.
 
-### 3. 搜尋與快捷鍵 / Search & Shortcuts
+### 4. 搜尋、複製與快捷鍵 / Search, Copy & Shortcuts
 
 - **指令搜尋：** 搜尋目前分類的標題、說明與指令內容。
 - **`Ctrl + K`（macOS 為 `⌘ + K`）：** 直接聚焦指令搜尋框。
 - **`Esc`：** 關閉選單、表單或對話框；若焦點在搜尋框，會清空搜尋條件。
-- **複製指令：** 點指令框或右側複製鈕可複製完整指令。
+- **複製指令：** 點指令框，或滑過指令框後點右側複製鈕，即可複製完整指令。
 - **選取與捲動：** 一般左鍵拖曳可用於選取指令框內的文字；內容過長時可拖曳水平捲軸，或使用 `Shift + 左鍵拖曳`、中鍵拖曳來水平移動。
 
 ---
@@ -70,30 +86,46 @@ A local snippet and command organizer built with React + Tauri 2. Organize comma
 - **Search:** Filters by title, description, and command content within the current category.
 - **`Ctrl + K` (`⌘ + K` on macOS):** Focuses the command search box.
 - **`Esc`:** Closes open menus, forms, or dialogs; if the search box is focused, clears the current search query.
-- **Copy:** Click a command box or the copy button on the right to copy the full command.
+- **Copy:** Click a command box, or hover it and click the copy button on the right, to copy the full command.
 - **Select & Scroll:** Select text inside a command box with a normal left-click drag. For long commands, use the horizontal scrollbar, `Shift + Left-click drag`, or `Middle-click drag` to pan horizontally.
 
-### 4. 外觀與視窗 / Appearance & Window Controls
+### 5. 迷你懸浮模式 / Mini Floating Mode
 
-- **彈窗表單：** 新增／編輯分類、群組、指令的表單一律以置中且較大的彈窗顯示（窄視窗也一樣），不會往下擠或擠在兩欄中的任一側。
-- **透明度滑桿（左上角）：** 調整視窗透明度，範圍為 `40%–100%`（預設 `100%`）。數值越低越能看到後面的視窗。*（僅在 Tauri 桌面版生效，Windows 使用原生視窗透明度。）*
-- **視窗置頂（右側大頭針按鈕）：** 切換視窗是否永遠在最上層。*（僅在 Tauri 桌面版生效。）*
-- **設定選單（右上角）：**
-  - **主題：** 深色／淺色 *（深色為深灰階）*。
-  - **語系：** 繁中／English。
-  - **字級：** 小／中／大。
+- 點右側的迷你模式按鈕進入膠囊式懸浮視窗；視窗會在目前位置縮小，不會跳到角落。
+- 拖曳膠囊左側的點狀握把或空白處即可移動視窗。
+- 點膠囊上的分類名稱會展開分類下拉選單，可直接切換分類。
+- 滑鼠移到膠囊上會展開指令面板；面板頂端有透明度滑桿，與主視窗共用同一設定。
+- 膠囊與面板上的按鈕可置頂、展開回完整視窗、縮小或關閉。
+- 迷你模式會跟隨主題、語系、字級與透明度設定；透明度 `100%` 時膠囊與面板為完全不透明。
 
 ---
 
-- **Modals:** Forms for adding/editing categories, groups, and commands always open in a large, centered modal dialog (even in narrow windows) so they never get squished into a single column.
-- **Transparency Slider (Top-left):** Adjusts window opacity between `40%` and `100%` (default: `100%`). Lower values make underlying windows more visible. *(Tauri desktop app only; Windows uses native window transparency.)*
-- **Pin Button (Right):** Toggles "Always on Top" mode. *(Tauri desktop app only.)*
-- **Settings Menu (Top-right):**
-  - **Theme:** Dark / Light *(Dark mode uses a dark grayscale palette)*.
-  - **Language:** 繁中 (Traditional Chinese) / English.
-  - **Font Size:** Small / Medium / Large.
+- Click the mini-mode button on the right to switch to a compact floating capsule. The window shrinks in place instead of jumping to a corner.
+- Drag the dotted handle on the left of the capsule, or any empty area, to move the window.
+- Click the category name on the capsule to open a dropdown and switch categories.
+- Hover over the capsule to expand the command panel. The opacity slider at the top of the panel is shared with the main window.
+- Buttons on the capsule let you pin, restore the full window, minimize, or close it.
+- Mini mode follows the configured theme, language, font size, and opacity. At `100%`, the capsule and panel are fully opaque.
 
-### 5. 資料存放 / Data Storage
+### 6. 外觀設定 / Appearance Settings
+
+- 點左上角設定選單可調整：
+  - **主題：** 深色／淺色。
+  - **語系：** 繁中／English。
+  - **字級：** 小／中／大。
+- 新增／編輯分類、群組、指令的表單一律以置中且較大的彈窗顯示，不會被擠在單一欄位中。
+- 設定會套用到主視窗與迷你懸浮模式。
+
+---
+
+- Click the settings menu at the top left to configure:
+  - **Theme:** Dark / Light.
+  - **Language:** 繁中 (Traditional Chinese) / English.
+  - **Font size:** Small / Medium / Large.
+- Forms for adding or editing categories, groups, and commands always open in a large, centered modal and never get squeezed into one column.
+- Settings apply to both the main window and mini floating mode.
+
+### 7. 資料存放 / Data Storage
 
 - 分類、群組、指令與偏好設定都存放在本機 WebView 的 `localStorage`，不需要登入或連網。
 - 清除應用程式資料、WebView 資料或移除 App 會一併清除這些資料。目前沒有內建匯出／匯入功能。

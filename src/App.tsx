@@ -2135,19 +2135,30 @@ export default function App() {
                   {fmt(t.noCommandsIn, { name: activeTab })}
                 </div>
               ) : (
-                miniItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`mini-row${copiedId === item.id ? " is-copied" : ""}`}
-                    onClick={() => void handleCopy(item)}
-                  >
-                    {cmdTitlesVisible && item.title && (
-                      <span className="mini-row-title">{item.title}</span>
-                    )}
-                    <span className="mini-row-code">{item.command}</span>
-                  </button>
-                ))
+                miniItems.map((item) => {
+                  const isCopied = copiedId === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`mini-row${isCopied ? " is-copied" : ""}`}
+                      onClick={() => void handleCopy(item)}
+                      aria-label={isCopied ? t.copied : undefined}
+                    >
+                      {cmdTitlesVisible && item.title && (
+                        <span className="mini-row-title">{item.title}</span>
+                      )}
+                      <span className="mini-row-code-line">
+                        <span className="mini-row-code">{item.command}</span>
+                        {isCopied && (
+                          <span className="mini-row-check" title={t.copied}>
+                            <CheckIcon />
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })
               )}
             </div>
           )}

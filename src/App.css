@@ -1390,8 +1390,7 @@ kbd {
 }
 
 :root[data-view="mini"] .mini-menu-item.is-active,
-:root[data-view="mini"] .mini-row:hover,
-:root[data-view="mini"] .mini-row.is-copied {
+:root[data-view="mini"] .mini-row:hover {
   border-color: var(--border);
 }
 
@@ -1547,10 +1546,14 @@ kbd {
   text-align: left;
 }
 
-.mini-row:hover,
-.mini-row.is-copied {
+.mini-row:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+:root[data-view="mini"] .mini-row.is-copied {
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(52, 211, 153, 0.14);
 }
 
 .mini-row-title {
@@ -1559,13 +1562,39 @@ kbd {
   font-weight: 600;
 }
 
+.mini-row-code-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
 .mini-row-code {
   overflow: hidden;
+  min-width: 0;
+  flex: 1;
   color: var(--accent);
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: calc(10px * var(--font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mini-row-check {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: #34d399;
+  color: #06251a;
+  animation: reveal 0.16s ease-out;
+}
+
+.mini-row-check svg {
+  width: 11px;
+  height: 11px;
 }
 
 .mini-menu {
