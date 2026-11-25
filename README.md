@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="app-icon.png" alt="copy-pocket logo" width="96" />
+</p>
+
 # copy-pocket
 
 本機端的常用指令收納工具，以 React + Tauri 2 建立。可依分類與群組整理指令、快速搜尋與複製，並支援迷你懸浮模式、視窗置頂、透明度、主題、語系與字級設定。資料只存放在本機，不會上傳。  
