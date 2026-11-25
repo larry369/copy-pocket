@@ -57,9 +57,13 @@ const STORAGE_FONT_SIZE_KEY = "command_pocket_font_size_v1";
 const STORAGE_OPACITY_KEY = "command_pocket_opacity_v1";
 const STORAGE_CATEGORIES_COLLAPSED_KEY = "command_pocket_categories_collapsed_v1";
 const STORAGE_CMD_TITLES_KEY = "command_pocket_cmd_titles_v1";
+const STORAGE_MINI_WIDTH_KEY = "command_pocket_mini_width_v1";
 const GROUP_DND_TYPE = "application/x-command-pocket-group";
-const MINI_COLLAPSED_SIZE = { width: 220, height: 44 };
-const MINI_EXPANDED_SIZE = { width: 220, height: 420 };
+const MINI_MIN_WIDTH = 220;
+const MINI_MAX_WIDTH = 900;
+const MAIN_MIN_SIZE = { width: 460, height: 480 };
+const MINI_COLLAPSED_SIZE = { width: MINI_MIN_WIDTH, height: 44 };
+const MINI_EXPANDED_SIZE = { width: MINI_MIN_WIDTH, height: 420 };
 
 const DEFAULT_COMMANDS: CommandItem[] = [
   {
@@ -306,6 +310,18 @@ function loadCmdTitles(): boolean {
   }
 }
 
+function loadMiniWidth(): number {
+  try {
+    const raw = localStorage.getItem(STORAGE_MINI_WIDTH_KEY);
+    if (raw === null) return MINI_MIN_WIDTH;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return MINI_MIN_WIDTH;
+    return Math.min(MINI_MAX_WIDTH, Math.max(MINI_MIN_WIDTH, Math.round(value)));
+  } catch {
+    return MINI_MIN_WIDTH;
+  }
+}
+
 function fmt(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
 }
@@ -328,6 +344,7 @@ const zhTW = {
   minimizeWindow: "縮小視窗",
   closeWindow: "關閉視窗",
   moveWindow: "拖曳移動視窗",
+  resizeMiniWidth: "拖曳調整迷你視窗寬度",
   theme: "主題",
   dark: "深色",
   light: "淺色",
@@ -463,6 +480,7 @@ const en: Strings = {
   minimizeWindow: "Minimize window",
   closeWindow: "Close window",
   moveWindow: "Drag to move window",
+  resizeMiniWidth: "Drag to resize mini window",
   theme: "Theme",
   dark: "Dark",
   light: "Light",
@@ -756,6 +774,7 @@ export default function App() {
   );
   const [layoutOverride, setLayoutOverride] = useState<"split" | "single" | null>(null);
   const [miniMode, setMiniMode] = useState(false);
+  const [miniWidth, setMiniWidth] = useState(loadMiniWidth);
   const [miniHover, setMiniHover] = useState(false);
   const [miniCategoryOpen, setMiniCategoryOpen] = useState(false);
   const miniPanelOpen = miniHover || miniCategoryOpen;
@@ -800,6 +819,7 @@ export default function App() {
   const codePanRef = useRef<{ x: number; scrollLeft: number; moved: boolean } | null>(null);
   const suppressCodeClickRef = useRef(false);
   const collapseWidthRef = useRef<number | null>(null);
+  const miniResizeRef = useRef<{ x: number; width: number; height: number } | null>(null);
   const normalBoundsRef = useRef<{
     width: number;
     height: number;
@@ -1042,6 +1062,12 @@ export default function App() {
   }, [cmdTitlesVisible]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_MINI_WIDTH_KEY, String(miniWidth));
+    } catch {}
+  }, [miniWidth]);
+
+  useEffect(() => {
     const query = window.matchMedia("(min-width: 900px)");
     const onChange = (e: MediaQueryListEvent) => setIsWideViewport(e.matches);
     setIsWideViewport(query.matches);
@@ -1163,13 +1189,18 @@ export default function App() {
         x: window.screenX ?? 0,
         y: window.screenY ?? 0,
       };
+      try {
+        await getCurrentWindow().setMinSize(
+          new LogicalSize(MINI_MIN_WIDTH, MINI_COLLAPSED_SIZE.height),
+        );
+      } catch {}
     }
     setMenuOpen(false);
     setMiniMode(true);
     setMiniHover(false);
     setMiniCategoryOpen(false);
     showToast(t.miniModeOn);
-    await setWindowSize(MINI_COLLAPSED_SIZE.width, MINI_COLLAPSED_SIZE.height);
+    await setWindowSize(miniWidth, MINI_COLLAPSED_SIZE.height);
   };
 
   const exitMiniMode = async () => {
@@ -1177,6 +1208,13 @@ export default function App() {
     setMiniHover(false);
     setMiniCategoryOpen(false);
     showToast(t.miniModeOff);
+    if (isTauri()) {
+      try {
+        await getCurrentWindow().setMinSize(
+          new LogicalSize(MAIN_MIN_SIZE.width, MAIN_MIN_SIZE.height),
+        );
+      } catch {}
+    }
     const bounds = normalBoundsRef.current;
     if (bounds) {
       await applyWindowBounds(bounds.width, bounds.height, false, bounds);
@@ -1186,9 +1224,38 @@ export default function App() {
 
   useEffect(() => {
     if (!miniMode) return;
-    const size = miniPanelOpen ? MINI_EXPANDED_SIZE : MINI_COLLAPSED_SIZE;
-    void setWindowSize(size.width, size.height);
+    const height = miniPanelOpen ? MINI_EXPANDED_SIZE.height : MINI_COLLAPSED_SIZE.height;
+    void setWindowSize(miniWidth, height);
   }, [miniMode, miniPanelOpen]);
+
+  const startMiniResize = (e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    miniResizeRef.current = {
+      x: e.clientX,
+      width: Math.round(window.outerWidth || window.innerWidth),
+      height: Math.round(window.outerHeight || window.innerHeight),
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const moveMiniResize = (e: React.PointerEvent<HTMLElement>) => {
+    const start = miniResizeRef.current;
+    if (!start) return;
+    const width = Math.min(
+      MINI_MAX_WIDTH,
+      Math.max(MINI_MIN_WIDTH, Math.round(start.width + e.clientX - start.x)),
+    );
+    setMiniWidth(width);
+    void setWindowSize(width, start.height);
+  };
+
+  const endMiniResize = (e: React.PointerEvent<HTMLElement>) => {
+    miniResizeRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
 
   const chooseTheme = (next: Theme) => {
     setMenuOpen(false);
@@ -2084,6 +2151,17 @@ export default function App() {
               <CloseIcon />
             </button>
           </div>
+          <div
+            className="mini-resize-grip"
+            role="separator"
+            aria-orientation="vertical"
+            title={t.resizeMiniWidth}
+            aria-label={t.resizeMiniWidth}
+            onPointerDown={startMiniResize}
+            onPointerMove={moveMiniResize}
+            onPointerUp={endMiniResize}
+            onPointerCancel={endMiniResize}
+          />
           {miniPanelOpen && (
             <div className="mini-panel">
               <div className="mini-panel-controls">

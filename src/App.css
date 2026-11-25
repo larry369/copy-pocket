@@ -1409,6 +1409,7 @@ kbd {
 }
 
 .mini-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1423,7 +1424,7 @@ kbd {
   flex: none;
   align-items: center;
   gap: 3px;
-  padding: 0 5px 0 4px;
+  padding: 0 10px 0 4px;
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--mini-surface);
@@ -1476,6 +1477,36 @@ kbd {
 
 .mini-drag:active {
   cursor: grabbing;
+}
+
+.mini-resize-grip {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  bottom: 4px;
+  z-index: 2;
+  display: flex;
+  width: 8px;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.mini-resize-grip::after {
+  content: "";
+  width: 3px;
+  height: 24px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--mini-grip);
+  opacity: 0.4;
+  transition: opacity 0.16s;
+}
+
+.mini-resize-grip:hover::after,
+.mini-resize-grip:active::after {
+  opacity: 1;
 }
 
 .mini-btn {
