@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import appIconUrl from "../app-icon.png";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 
@@ -2983,9 +2984,7 @@ export default function App() {
 
       <footer className="statusbar">
         <span className="brand" aria-label="copy-pocket">
-          <span className="brand-mark" aria-hidden="true">
-            <CopyIcon />
-          </span>
+          <img className="brand-logo" src={appIconUrl} alt="" aria-hidden="true" />
           <span>copy-pocket</span>
         </span>
         <span className="status-summary">

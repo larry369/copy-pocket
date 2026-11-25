@@ -1290,20 +1290,12 @@ input:focus-visible {
   letter-spacing: 0.01em;
 }
 
-.brand-mark {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  place-items: center;
-  border: 1px solid rgba(76, 141, 255, 0.5);
+.brand-logo {
+  width: 24px;
+  height: 24px;
+  flex: none;
   border-radius: 5px;
-  background: rgba(76, 141, 255, 0.16);
-  color: var(--accent);
-}
-
-.brand-mark svg {
-  width: 11px;
-  height: 11px;
+  object-fit: contain;
 }
 
 .status-summary {
