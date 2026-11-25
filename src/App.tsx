@@ -1076,6 +1076,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const onResize = () => setLayoutOverride(null);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
     if (!isTauri()) return;
     getCurrentWindow()
       .isAlwaysOnTop()
