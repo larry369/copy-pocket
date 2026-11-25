@@ -1194,6 +1194,7 @@ export default function App() {
         y: window.screenY ?? 0,
       };
       try {
+        await getCurrentWindow().setResizable(false);
         await getCurrentWindow().setMinSize(
           new LogicalSize(MINI_MIN_WIDTH, MINI_COLLAPSED_SIZE.height),
         );
@@ -1217,6 +1218,7 @@ export default function App() {
         await getCurrentWindow().setMinSize(
           new LogicalSize(MAIN_MIN_SIZE.width, MAIN_MIN_SIZE.height),
         );
+        await getCurrentWindow().setResizable(true);
       } catch {}
     }
     const bounds = normalBoundsRef.current;

@@ -1399,6 +1399,7 @@ input:focus-visible {
 :root[data-view="mini"] button:focus-visible,
 :root[data-view="mini"] input:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 
 :root[data-view="mini"] .mini-menu-item.is-active,
