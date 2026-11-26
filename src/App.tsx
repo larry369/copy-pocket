@@ -59,9 +59,12 @@ const STORAGE_OPACITY_KEY = "command_pocket_opacity_v1";
 const STORAGE_CATEGORIES_COLLAPSED_KEY = "command_pocket_categories_collapsed_v1";
 const STORAGE_CMD_TITLES_KEY = "command_pocket_cmd_titles_v1";
 const STORAGE_MINI_WIDTH_KEY = "command_pocket_mini_width_v1";
+const STORAGE_MINI_HEIGHT_KEY = "command_pocket_mini_height_v1";
 const GROUP_DND_TYPE = "application/x-command-pocket-group";
 const MINI_MIN_WIDTH = 220;
 const MINI_MAX_WIDTH = 900;
+const MINI_MIN_HEIGHT = 240;
+const MINI_MAX_HEIGHT = 1200;
 const MAIN_MIN_SIZE = { width: 460, height: 480 };
 const MINI_COLLAPSED_SIZE = { width: MINI_MIN_WIDTH, height: 44 };
 const MINI_EXPANDED_SIZE = { width: MINI_MIN_WIDTH, height: 420 };
@@ -323,6 +326,18 @@ function loadMiniWidth(): number {
   }
 }
 
+function loadMiniHeight(): number {
+  try {
+    const raw = localStorage.getItem(STORAGE_MINI_HEIGHT_KEY);
+    if (raw === null) return MINI_EXPANDED_SIZE.height;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return MINI_EXPANDED_SIZE.height;
+    return Math.min(MINI_MAX_HEIGHT, Math.max(MINI_MIN_HEIGHT, Math.round(value)));
+  } catch {
+    return MINI_EXPANDED_SIZE.height;
+  }
+}
+
 function fmt(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => String(vars[key] ?? ""));
 }
@@ -346,6 +361,7 @@ const zhTW = {
   closeWindow: "關閉視窗",
   moveWindow: "拖曳移動視窗",
   resizeMiniWidth: "拖曳調整迷你視窗寬度",
+  resizeMiniHeight: "拖曳調整迷你指令面板高度",
   theme: "主題",
   dark: "深色",
   light: "淺色",
@@ -481,6 +497,7 @@ const en: Strings = {
   closeWindow: "Close window",
   moveWindow: "Drag to move window",
   resizeMiniWidth: "Drag to resize mini window",
+  resizeMiniHeight: "Drag to resize mini command panel height",
   theme: "Theme",
   dark: "Dark",
   light: "Light",
@@ -774,6 +791,7 @@ export default function App() {
   const [layoutOverride, setLayoutOverride] = useState<"split" | "single" | null>(null);
   const [miniMode, setMiniMode] = useState(false);
   const [miniWidth, setMiniWidth] = useState(loadMiniWidth);
+  const [miniHeight, setMiniHeight] = useState(loadMiniHeight);
   const [miniHover, setMiniHover] = useState(false);
   const [miniCategoryOpen, setMiniCategoryOpen] = useState(false);
   const miniPanelOpen = miniHover || miniCategoryOpen;
@@ -819,6 +837,8 @@ export default function App() {
   const suppressCodeClickRef = useRef(false);
   const collapseWidthRef = useRef<number | null>(null);
   const miniResizeRef = useRef<{ x: number; width: number; height: number } | null>(null);
+  const miniHeightResizeRef = useRef<{ y: number; height: number } | null>(null);
+  const miniResizingRef = useRef(false);
   const normalBoundsRef = useRef<{
     width: number;
     height: number;
@@ -1067,6 +1087,12 @@ export default function App() {
   }, [miniWidth]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_MINI_HEIGHT_KEY, String(miniHeight));
+    } catch {}
+  }, [miniHeight]);
+
+  useEffect(() => {
     const query = window.matchMedia("(min-width: 900px)");
     const onChange = (e: MediaQueryListEvent) => setIsWideViewport(e.matches);
     setIsWideViewport(query.matches);
@@ -1231,13 +1257,14 @@ export default function App() {
 
   useEffect(() => {
     if (!miniMode) return;
-    const height = miniPanelOpen ? MINI_EXPANDED_SIZE.height : MINI_COLLAPSED_SIZE.height;
+    const height = miniPanelOpen ? miniHeight : MINI_COLLAPSED_SIZE.height;
     void setWindowSize(miniWidth, height);
-  }, [miniMode, miniPanelOpen]);
+  }, [miniMode, miniPanelOpen, miniWidth, miniHeight]);
 
   const startMiniResize = (e: React.PointerEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    miniResizingRef.current = true;
     miniResizeRef.current = {
       x: e.clientX,
       width: Math.round(window.outerWidth || window.innerWidth),
@@ -1258,7 +1285,38 @@ export default function App() {
   };
 
   const endMiniResize = (e: React.PointerEvent<HTMLElement>) => {
+    miniResizingRef.current = false;
     miniResizeRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  const startMiniHeightResize = (e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    miniResizingRef.current = true;
+    miniHeightResizeRef.current = {
+      y: e.clientY,
+      height: Math.round(window.outerHeight || window.innerHeight),
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const moveMiniHeightResize = (e: React.PointerEvent<HTMLElement>) => {
+    const start = miniHeightResizeRef.current;
+    if (!start) return;
+    const height = Math.min(
+      MINI_MAX_HEIGHT,
+      Math.max(MINI_MIN_HEIGHT, Math.round(start.height + e.clientY - start.y)),
+    );
+    setMiniHeight(height);
+    void setWindowSize(miniWidth, height);
+  };
+
+  const endMiniHeightResize = (e: React.PointerEvent<HTMLElement>) => {
+    miniResizingRef.current = false;
+    miniHeightResizeRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
@@ -2090,11 +2148,43 @@ export default function App() {
 
   if (miniMode) {
     const miniItems = items.filter((item) => item.category === activeTab);
+    const miniUngroupedItems = miniItems.filter((item) => !item.groupId);
+    const miniGroupSections = groupsForActive
+      .map((group) => ({
+        group,
+        items: miniItems.filter((item) => item.groupId === group.id),
+      }))
+      .filter((section) => section.items.length > 0);
+    const renderMiniRow = (item: CommandItem) => {
+      const isCopied = copiedId === item.id;
+      return (
+        <button
+          key={item.id}
+          type="button"
+          className={`mini-row${isCopied ? " is-copied" : ""}${
+            cmdTitlesVisible ? "" : " hide-mini-title"
+          }`}
+          onClick={() => void handleCopy(item)}
+          aria-label={isCopied ? t.copied : item.title || item.command}
+        >
+          {item.title && <span className="mini-row-title">{item.title}</span>}
+          <span className="mini-row-code-line">
+            <span className="mini-row-code">{item.command}</span>
+            {isCopied && (
+              <span className="mini-row-check" title={t.copied}>
+                <CheckIcon />
+              </span>
+            )}
+          </span>
+        </button>
+      );
+    };
     return (
       <div
         className={`mini-root${miniPanelOpen ? " is-expanded" : ""}`}
         onMouseEnter={() => setMiniHover(true)}
         onMouseLeave={() => {
+          if (miniResizingRef.current) return;
           setMiniHover(false);
           setMiniCategoryOpen(false);
         }}
@@ -2220,32 +2310,59 @@ export default function App() {
                   {fmt(t.noCommandsIn, { name: activeTab })}
                 </div>
               ) : (
-                miniItems.map((item) => {
-                  const isCopied = copiedId === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`mini-row${isCopied ? " is-copied" : ""}`}
-                      onClick={() => void handleCopy(item)}
-                      aria-label={isCopied ? t.copied : undefined}
-                    >
-                      {cmdTitlesVisible && item.title && (
-                        <span className="mini-row-title">{item.title}</span>
-                      )}
-                      <span className="mini-row-code-line">
-                        <span className="mini-row-code">{item.command}</span>
-                        {isCopied && (
-                          <span className="mini-row-check" title={t.copied}>
-                            <CheckIcon />
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })
+                <>
+                  {miniUngroupedItems.length > 0 && (
+                    <div className="mini-group-section">
+                      <button
+                        type="button"
+                        className="mini-group-label"
+                        onClick={() => setUngroupedCollapsed((prev) => !prev)}
+                        title={t.ungrouped}
+                      >
+                        <span className="mini-group-caret" aria-hidden="true">
+                          {ungroupedCollapsed ? "▸" : "▾"}
+                        </span>
+                        <span className="mini-group-name">{t.ungrouped}</span>
+                        <span className="mini-group-count">
+                          {miniUngroupedItems.length}
+                        </span>
+                      </button>
+                      {!ungroupedCollapsed && miniUngroupedItems.map(renderMiniRow)}
+                    </div>
+                  )}
+                  {miniGroupSections.map(({ group, items: sectionItems }) => (
+                    <div className="mini-group-section" key={group.id}>
+                      <button
+                        type="button"
+                        className="mini-group-label"
+                        onClick={() => toggleGroupCollapse(group.id)}
+                        title={group.name}
+                      >
+                        <span className="mini-group-caret" aria-hidden="true">
+                          {group.collapsed ? "▸" : "▾"}
+                        </span>
+                        <span className="mini-group-name">{group.name}</span>
+                        <span className="mini-group-count">{sectionItems.length}</span>
+                      </button>
+                      {!group.collapsed && sectionItems.map(renderMiniRow)}
+                    </div>
+                  ))}
+                </>
               )}
             </div>
+          )}
+          {miniPanelOpen && (
+            <div
+              className="mini-height-grip"
+              role="separator"
+              aria-orientation="horizontal"
+              title={t.resizeMiniHeight}
+              aria-label={t.resizeMiniHeight}
+              onPointerDown={startMiniHeightResize}
+              onPointerMove={moveMiniHeightResize}
+              onPointerUp={endMiniHeightResize}
+              onPointerCancel={endMiniHeightResize}
+            />
           )}
         </div>
       </div>
