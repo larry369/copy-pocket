@@ -1,8 +1,6 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+mod commands;
+
+use commands::{execute_command, greet, stop_command, ProcessRegistry};
 
 #[tauri::command]
 fn set_window_opacity(window: tauri::WebviewWindow, value: f64) -> Result<(), String> {
@@ -89,7 +87,14 @@ pub fn run() {
     setup_portable_webview2();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, set_window_opacity])
+        .plugin(tauri_plugin_dialog::init())
+        .manage(ProcessRegistry::default())
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            set_window_opacity,
+            execute_command,
+            stop_command
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

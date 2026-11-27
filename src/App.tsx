@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import appIconUrl from "../app-icon.png";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 
 type Category = string;
@@ -10,11 +11,16 @@ interface CategoryItem {
   locked: boolean;
 }
 
+type Shell = "powershell" | "cmd";
+type RunMode = "inherit" | "custom" | "copy-only";
+
 interface GroupItem {
   id: string;
   category: Category;
   name: string;
   collapsed: boolean;
+  defaultCwd?: string;
+  defaultShell?: Shell;
 }
 
 interface CommandItem {
@@ -24,9 +30,80 @@ interface CommandItem {
   note?: string;
   command: string;
   groupId?: string;
+  runMode?: RunMode;
+  customCwd?: string;
+  customShell?: Shell;
+}
+
+interface EffectiveRunConfig {
+  cwd?: string;
+  shell?: Shell;
+}
+
+type RunStatus = "idle" | "running" | "success" | "error";
+
+interface RunResult {
+  status: RunStatus;
+  exitCode?: number | null;
+  cwd?: string;
+  shell?: Shell;
+  stdout: string;
+  stderr: string;
+  error?: string;
+}
+
+interface ExecuteResponse {
+  success: boolean;
+  exitCode?: number | null;
+  stdoutTail?: string;
+  stderrTail?: string;
+  error?: string;
 }
 
 type CmdForm = { mode: "add" } | { mode: "edit"; item: CommandItem };
+
+const OUTPUT_LIMIT = 16_000;
+
+function normalizeShell(value: unknown): Shell | undefined {
+  return value === "powershell" || value === "cmd" ? value : undefined;
+}
+
+function normalizeRunMode(value: unknown): RunMode {
+  return value === "custom" || value === "copy-only" || value === "inherit"
+    ? value
+    : "inherit";
+}
+
+function isAbsolutePath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\") || value.startsWith("/");
+}
+
+function truncateOutput(value: unknown): string {
+  if (typeof value !== "string" || !value) return "";
+  return value.length > OUTPUT_LIMIT ? value.slice(-OUTPUT_LIMIT) : value;
+}
+
+function resolveEffectiveConfig(
+  item: CommandItem,
+  group?: GroupItem,
+): EffectiveRunConfig {
+  const mode = normalizeRunMode(item.runMode);
+  if (mode === "copy-only") return {};
+  if (mode === "custom") {
+    return {
+      cwd: item.customCwd?.trim() || undefined,
+      shell: normalizeShell(item.customShell),
+    };
+  }
+  return {
+    cwd: group?.defaultCwd?.trim() || undefined,
+    shell: normalizeShell(group?.defaultShell),
+  };
+}
+
+function shellLabel(shell: Shell | undefined, t: Strings): string {
+  return shell === "powershell" ? t.powershell : shell === "cmd" ? t.cmd : "";
+}
 
 type ConfirmTarget =
   | { kind: "category"; name: Category }
@@ -217,6 +294,12 @@ function loadItems(): CommandItem[] {
               ? entry.note
               : undefined,
           groupId: typeof entry.groupId === "string" ? entry.groupId : undefined,
+          runMode: normalizeRunMode(entry.runMode),
+          customCwd:
+            typeof entry.customCwd === "string" && entry.customCwd.trim()
+              ? entry.customCwd
+              : undefined,
+          customShell: normalizeShell(entry.customShell),
         }));
     }
   } catch {
@@ -249,6 +332,11 @@ function loadGroups(): GroupItem[] {
         category: candidate.category,
         name: candidate.name,
         collapsed: candidate.collapsed === true,
+        defaultCwd:
+          typeof candidate.defaultCwd === "string" && candidate.defaultCwd.trim()
+            ? candidate.defaultCwd
+            : undefined,
+        defaultShell: normalizeShell(candidate.defaultShell),
       });
     }
     return result;
@@ -430,11 +518,13 @@ const zhTW = {
   groupPlaceholder: "例如：部署流程、常用查詢",
   groupExists: "這個群組已經存在了",
   groupAdded: "群組已新增",
+  groupUpdated: "群組執行設定已更新",
   groupRenamed: "群組已重新命名",
   groupOrderUpdated: "群組順序已更新",
   deleteGroup: "刪除群組",
   deleteGroupItem: "刪除群組 {name}",
   renameGroup: "重新命名群組",
+  editGroupDefaults: "編輯群組執行設定",
   groupDeleted: "群組已刪除，指令已回到未分組",
   collapseGroup: "收合群組",
   expandGroup: "展開群組",
@@ -474,6 +564,37 @@ const zhTW = {
   emptyCommandsHint: "點「+ 指令」加入第一筆。",
   statusSummary:
     "{categories} 個分類 · {groups} 個群組 · 顯示 {shown} / {total} 筆指令",
+  defaultCwd: "預設工作目錄",
+  defaultShell: "預設執行環境",
+  chooseFolder: "選擇資料夾",
+  folderInputHint: "請選擇資料夾或貼上絕對路徑，例如 D:\\work\\project。",
+  powershell: "PowerShell",
+  cmd: "CMD",
+  noShellConfigured: "未設定執行環境，將維持純複製",
+  runMode: "執行模式",
+  runModeInherit: "跟隨群組",
+  runModeCustom: "自訂執行",
+  runModeCopyOnly: "僅複製（不執行）",
+  inheritSummary: "目前設定：{cwd} · {shell}",
+  customCwd: "自訂工作目錄",
+  runCommand: "執行指令",
+  stopCommand: "停止程序",
+  running: "執行中",
+  success: "執行成功",
+  error: "執行失敗",
+  viewOutput: "查看輸出",
+  outputTitle: "執行輸出",
+  outputExitCode: "結束碼",
+  outputCwd: "執行路徑",
+  outputShell: "執行環境",
+  outputStdout: "標準輸出",
+  outputStderr: "錯誤輸出",
+  copyOutput: "一鍵複製輸出",
+  outputCopied: "輸出已複製",
+  outputCopyFailed: "輸出複製失敗",
+  executeFailed: "指令啟動失敗",
+  browserExecuteUnsupported: "瀏覽器預覽無法執行指令，請使用 Tauri 桌面程式。",
+  cwdMustBeAbsolute: "工作目錄必須是絕對路徑，請重新選擇資料夾。",
 };
 
 type Strings = typeof zhTW;
@@ -566,11 +687,13 @@ const en: Strings = {
   groupPlaceholder: "e.g. Deployment, Common queries",
   groupExists: "This group already exists",
   groupAdded: "Group added",
+  groupUpdated: "Group run settings updated",
   groupRenamed: "Group renamed",
   groupOrderUpdated: "Group order updated",
   deleteGroup: "Delete group",
   deleteGroupItem: 'Delete group "{name}"',
   renameGroup: "Rename group",
+  editGroupDefaults: "Edit group run settings",
   groupDeleted: "Group deleted; commands moved to Ungrouped",
   collapseGroup: "Collapse group",
   expandGroup: "Expand group",
@@ -611,9 +734,150 @@ const en: Strings = {
   emptyCommandsHint: 'Click "+ Command" to add the first one.',
   statusSummary:
     "{categories} categories · {groups} groups · showing {shown} / {total} commands",
+  defaultCwd: "Default working directory",
+  defaultShell: "Default shell",
+  chooseFolder: "Choose folder",
+  folderInputHint: "Choose a folder or paste an absolute path, e.g. D:\\work\\project.",
+  powershell: "PowerShell",
+  cmd: "CMD",
+  noShellConfigured: "No shell configured; copy only",
+  runMode: "Run mode",
+  runModeInherit: "Follow group",
+  runModeCustom: "Custom execution",
+  runModeCopyOnly: "Copy only (no execution)",
+  inheritSummary: "Current: {cwd} · {shell}",
+  customCwd: "Custom working directory",
+  runCommand: "Run command",
+  stopCommand: "Stop process",
+  running: "Running",
+  success: "Succeeded",
+  error: "Failed",
+  viewOutput: "View output",
+  outputTitle: "Execution output",
+  outputExitCode: "Exit code",
+  outputCwd: "Working directory",
+  outputShell: "Shell",
+  outputStdout: "Standard output",
+  outputStderr: "Standard error",
+  copyOutput: "Copy output",
+  outputCopied: "Output copied",
+  outputCopyFailed: "Failed to copy output",
+  executeFailed: "Failed to start command",
+  browserExecuteUnsupported: "Execution is unavailable in browser preview; use the Tauri desktop app.",
+  cwdMustBeAbsolute: "Working directory must be an absolute path; choose the folder again.",
 };
 
 const I18N: Record<Lang, Strings> = { "zh-TW": zhTW, en };
+
+function FolderField({
+  value,
+  onChange,
+  label,
+  placeholder,
+  chooseLabel,
+  hint,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  placeholder?: string;
+  chooseLabel: string;
+  hint: string;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const pickFolder = async () => {
+    if (isTauri()) {
+      try {
+        const selected = await openFolderDialog({
+          directory: true,
+          multiple: false,
+        });
+        if (typeof selected === "string" && selected.trim()) {
+          onChange(selected);
+        }
+      } catch {
+        inputRef.current?.click();
+      }
+      return;
+    }
+    inputRef.current?.click();
+  };
+
+  return (
+    <div className="folder-field">
+      <div className="form-row">
+        <input
+          type="text"
+          className="field field--mono"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
+        />
+        <button
+          type="button"
+          className="btn btn--sm folder-picker"
+          onClick={() => void pickFolder()}
+        >
+          {chooseLabel}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          // @ts-expect-error non-standard but supported folder picker in Chromium
+          webkitdirectory=""
+          directory=""
+          className="folder-picker-input"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const path = (file as File & { path?: string }).path;
+              if (path) onChange(path);
+            }
+            e.target.value = "";
+          }}
+        />
+      </div>
+      <span className="field-hint">{hint}</span>
+    </div>
+  );
+}
+
+function ShellCheckboxes({
+  value,
+  onChange,
+  label,
+  powershellLabel,
+  cmdLabel,
+}: {
+  value: Shell | undefined;
+  onChange: (value: Shell | undefined) => void;
+  label: string;
+  powershellLabel: string;
+  cmdLabel: string;
+}) {
+  return (
+    <div className="form-row shell-checkboxes" role="group" aria-label={label}>
+      <label className="check-label">
+        <input
+          type="checkbox"
+          checked={value === "powershell"}
+          onChange={() => onChange(value === "powershell" ? undefined : "powershell")}
+        />
+        {powershellLabel}
+      </label>
+      <label className="check-label">
+        <input
+          type="checkbox"
+          checked={value === "cmd"}
+          onChange={() => onChange(value === "cmd" ? undefined : "cmd")}
+        />
+        {cmdLabel}
+      </label>
+    </div>
+  );
+}
 
 function Icon({ children }: { children: React.ReactNode }) {
   return (
@@ -799,8 +1063,11 @@ export default function App() {
   const t = I18N[lang];
   const [showGroupAdd, setShowGroupAdd] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
+  const [groupDefaultCwdInput, setGroupDefaultCwdInput] = useState("");
+  const [groupDefaultShell, setGroupDefaultShell] = useState<Shell | undefined>();
   const [groupError, setGroupError] = useState("");
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [editingGroupDefaultsId, setEditingGroupDefaultsId] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState("");
   const [ungroupedCollapsed, setUngroupedCollapsed] = useState(false);
   const [cmdForm, setCmdForm] = useState<CmdForm | null>(null);
@@ -808,6 +1075,9 @@ export default function App() {
   const [noteInput, setNoteInput] = useState("");
   const [commandInput, setCommandInput] = useState("");
   const [groupSelect, setGroupSelect] = useState(UNGROUPED_KEY);
+  const [runModeInput, setRunModeInput] = useState<RunMode>("inherit");
+  const [customCwdInput, setCustomCwdInput] = useState("");
+  const [customShell, setCustomShell] = useState<Shell | undefined>();
   const [categoryQuery, setCategoryQuery] = useState("");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState("");
@@ -823,6 +1093,9 @@ export default function App() {
     id: string;
     position: "before" | "after";
   } | null>(null);
+  const [runResults, setRunResults] = useState<Record<string, RunResult>>({});
+  const [outputItemId, setOutputItemId] = useState<string | null>(null);
+  const runningIdsRef = useRef<Set<string>>(new Set());
 
   const searchRef = useRef<HTMLInputElement | null>(null);
   const categorySearchRef = useRef<HTMLInputElement | null>(null);
@@ -995,6 +1268,10 @@ export default function App() {
           setConfirmDialog(null);
         } else if (renamingGroupId) {
           setRenamingGroupId(null);
+        } else if (outputItemId) {
+          setOutputItemId(null);
+        } else if (editingGroupDefaultsId) {
+          setEditingGroupDefaultsId(null);
         } else if (catPanel !== "none" || showGroupAdd || cmdForm) {
           closeForms();
         } else if (document.activeElement === searchRef.current) {
@@ -1020,6 +1297,8 @@ export default function App() {
     menuOpen,
     confirmDialog,
     renamingGroupId,
+    outputItemId,
+    editingGroupDefaultsId,
     catPanel,
     showGroupAdd,
     cmdForm,
@@ -1357,7 +1636,11 @@ export default function App() {
     setEditCatName("");
     setCatError("");
     setGroupError("");
+    setGroupNameInput("");
+    setGroupDefaultCwdInput("");
+    setGroupDefaultShell(undefined);
     setRenamingGroupId(null);
+    setEditingGroupDefaultsId(null);
     setRenameInput("");
     setDraggingCat(null);
     setDropCat(null);
@@ -1557,9 +1840,13 @@ export default function App() {
         category: activeTab,
         name: trimmed,
         collapsed: false,
+        defaultCwd: groupDefaultCwdInput.trim() || undefined,
+        defaultShell: groupDefaultShell,
       },
     ]);
     setGroupNameInput("");
+    setGroupDefaultCwdInput("");
+    setGroupDefaultShell(undefined);
     setGroupError("");
     setShowGroupAdd(false);
     showToast(t.groupAdded);
@@ -1569,6 +1856,36 @@ export default function App() {
     closeForms();
     setRenamingGroupId(group.id);
     setRenameInput(group.name);
+  };
+
+  const startEditGroupDefaults = (group: GroupItem) => {
+    closeForms();
+    setEditingGroupDefaultsId(group.id);
+    setGroupDefaultCwdInput(group.defaultCwd ?? "");
+    setGroupDefaultShell(group.defaultShell);
+  };
+
+  const saveGroupDefaults = () => {
+    const target = groups.find((g) => g.id === editingGroupDefaultsId);
+    if (!target) {
+      setEditingGroupDefaultsId(null);
+      return;
+    }
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.id === target.id
+          ? {
+              ...g,
+              defaultCwd: groupDefaultCwdInput.trim() || undefined,
+              defaultShell: groupDefaultShell,
+            }
+          : g,
+      ),
+    );
+    setEditingGroupDefaultsId(null);
+    setGroupDefaultCwdInput("");
+    setGroupDefaultShell(undefined);
+    showToast(t.groupUpdated);
   };
 
   const saveRenameGroup = () => {
@@ -1672,6 +1989,110 @@ export default function App() {
     }
   };
 
+  const copyOutput = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(t.outputCopied);
+    } catch {
+      showToast(t.outputCopyFailed);
+    }
+  };
+
+  const handleRunCommand = async (item: CommandItem) => {
+    const config = resolveEffectiveConfig(
+      item,
+      groups.find((group) => group.id === item.groupId),
+    );
+    if (!config.shell || runningIdsRef.current.has(item.id)) return;
+    if (config.cwd && !isAbsolutePath(config.cwd)) {
+      showToast(t.cwdMustBeAbsolute);
+      return;
+    }
+    if (!isTauri()) {
+      showToast(t.browserExecuteUnsupported);
+      return;
+    }
+
+    runningIdsRef.current.add(item.id);
+    setRunResults((prev) => ({
+      ...prev,
+      [item.id]: {
+        status: "running",
+        cwd: config.cwd,
+        shell: config.shell,
+        stdout: "",
+        stderr: "",
+      },
+    }));
+
+    try {
+      const response = await invoke<ExecuteResponse>("execute_command", {
+        commandId: item.id,
+        command: item.command,
+        shell: config.shell,
+        cwd: config.cwd ?? null,
+      });
+      const stdout = truncateOutput(response.stdoutTail);
+      const stderr = truncateOutput(response.stderrTail);
+      const status: RunStatus =
+        response.success && response.exitCode === 0
+          ? "success"
+          : "error";
+      setRunResults((prev) => ({
+        ...prev,
+        [item.id]: {
+          status,
+          exitCode: response.exitCode ?? null,
+          cwd: config.cwd,
+          shell: config.shell,
+          stdout,
+          stderr,
+          error: response.error,
+        },
+      }));
+      if (status === "error") setOutputItemId(item.id);
+      if (status === "success") {
+        setTimeout(() => {
+          setRunResults((prev) =>
+            prev[item.id]?.status === "success"
+              ? { ...prev, [item.id]: { ...prev[item.id], status: "idle" } }
+              : prev,
+          );
+        }, 1800);
+      }
+    } catch (error) {
+      setRunResults((prev) => ({
+        ...prev,
+        [item.id]: {
+          status: "error",
+          cwd: config.cwd,
+          shell: config.shell,
+          stdout: "",
+          stderr: "",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }));
+      setOutputItemId(item.id);
+    } finally {
+      runningIdsRef.current.delete(item.id);
+    }
+  };
+
+  const handleStopCommand = async (item: CommandItem) => {
+    try {
+      await invoke("stop_command", { commandId: item.id });
+    } catch (error) {
+      setRunResults((prev) => ({
+        ...prev,
+        [item.id]: {
+          ...(prev[item.id] ?? { stdout: "", stderr: "" }),
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    }
+  };
+
   const startCodePan = (e: React.PointerEvent<HTMLElement>) => {
     const isPanGesture = e.button === 1 || (e.button === 0 && (e.shiftKey || e.altKey));
     if (!isPanGesture) return;
@@ -1705,6 +2126,9 @@ export default function App() {
     setNoteInput("");
     setCommandInput("");
     setGroupSelect(groupId ?? UNGROUPED_KEY);
+    setRunModeInput("inherit");
+    setCustomCwdInput("");
+    setCustomShell(undefined);
     setCmdForm({ mode: "add" });
     setCatPanel("none");
     setShowGroupAdd(false);
@@ -1717,6 +2141,9 @@ export default function App() {
     setNoteInput(item.note ?? "");
     setCommandInput(item.command);
     setGroupSelect(item.groupId ?? UNGROUPED_KEY);
+    setRunModeInput(normalizeRunMode(item.runMode));
+    setCustomCwdInput(item.customCwd ?? "");
+    setCustomShell(normalizeShell(item.customShell));
     setCmdForm({ mode: "edit", item });
     setCatPanel("none");
     setShowGroupAdd(false);
@@ -1732,6 +2159,9 @@ export default function App() {
     if (!trimmedCommand || !activeTab || !cmdForm) return;
 
     const groupId = groupSelect === UNGROUPED_KEY ? undefined : groupSelect;
+    const runMode = normalizeRunMode(runModeInput);
+    const customCwd = customCwdInput.trim() || undefined;
+    const customShellValue = normalizeShell(runMode === "custom" ? customShell : undefined);
 
     if (cmdForm.mode === "edit") {
       const id = cmdForm.item.id;
@@ -1744,6 +2174,9 @@ export default function App() {
                 note: trimmedNote || undefined,
                 command: trimmedCommand,
                 groupId,
+                runMode,
+                customCwd,
+                customShell: customShellValue,
               }
             : item,
         ),
@@ -1757,6 +2190,9 @@ export default function App() {
         note: trimmedNote || undefined,
         command: trimmedCommand,
         groupId,
+        runMode,
+        customCwd,
+        customShell: customShellValue,
       };
       setItems((prev) => [...prev, newItem]);
       showToast(t.commandAdded);
@@ -1767,6 +2203,9 @@ export default function App() {
     setNoteInput("");
     setCommandInput("");
     setGroupSelect(UNGROUPED_KEY);
+    setRunModeInput("inherit");
+    setCustomCwdInput("");
+    setCustomShell(undefined);
   };
 
   const handleDragStart = (e: React.DragEvent<HTMLElement>, id: string) => {
@@ -2000,6 +2439,98 @@ export default function App() {
         ? t.emptySearchHint
         : t.emptyCommandsHint;
 
+  const renderRunControls = (item: CommandItem) => {
+    const group = groups.find((g) => g.id === item.groupId);
+    const config = resolveEffectiveConfig(item, group);
+    if (!config.shell) return null;
+    const result = runResults[item.id];
+    const status = result?.status ?? "idle";
+
+    return (
+      <div className="run-controls">
+        {status === "running" ? (
+          <button
+            type="button"
+            className="icon-btn run-btn run-btn--stop"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleStopCommand(item);
+            }}
+            title={t.stopCommand}
+            aria-label={t.stopCommand}
+          >
+            ■
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="icon-btn run-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleRunCommand(item);
+            }}
+            title={t.runCommand}
+            aria-label={t.runCommand}
+          >
+            ▶
+          </button>
+        )}
+        {status === "running" && (
+          <button
+            type="button"
+            className="run-badge run-badge--running"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOutputItemId(item.id);
+            }}
+          >
+            {t.running}
+          </button>
+        )}
+        {status === "success" && (
+          <button
+            type="button"
+            className="run-badge run-badge--success"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOutputItemId(item.id);
+            }}
+            title={t.viewOutput}
+          >
+            ✓
+          </button>
+        )}
+        {status === "error" && (
+          <button
+            type="button"
+            className="run-badge run-badge--error"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOutputItemId(item.id);
+            }}
+            title={t.error}
+          >
+            !
+          </button>
+        )}
+        {result && result.status !== "running" && (
+          <button
+            type="button"
+            className="output-badge"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOutputItemId(item.id);
+            }}
+            title={t.viewOutput}
+            aria-label={t.viewOutput}
+          >
+            <CopyIcon />
+          </button>
+        )}
+      </div>
+    );
+  };
+
   const renderCard = (item: CommandItem) => {
     const isCopied = copiedId === item.id;
 
@@ -2059,6 +2590,7 @@ export default function App() {
           </div>
         </div>
         <div className="cmd-actions">
+          {renderRunControls(item)}
           <button
             type="button"
             className="icon-btn"
@@ -2158,25 +2690,27 @@ export default function App() {
     const renderMiniRow = (item: CommandItem) => {
       const isCopied = copiedId === item.id;
       return (
-        <button
-          key={item.id}
-          type="button"
-          className={`mini-row${isCopied ? " is-copied" : ""}${
-            cmdTitlesVisible ? "" : " hide-mini-title"
-          }`}
-          onClick={() => void handleCopy(item)}
-          aria-label={isCopied ? t.copied : item.title || item.command}
-        >
-          {item.title && <span className="mini-row-title">{item.title}</span>}
-          <span className="mini-row-code-line">
-            <span className="mini-row-code">{item.command}</span>
-            {isCopied && (
-              <span className="mini-row-check" title={t.copied}>
-                <CheckIcon />
-              </span>
-            )}
-          </span>
-        </button>
+        <div key={item.id} className="mini-row-wrap">
+          <button
+            type="button"
+            className={`mini-row${isCopied ? " is-copied" : ""}${
+              cmdTitlesVisible ? "" : " hide-mini-title"
+            }`}
+            onClick={() => void handleCopy(item)}
+            aria-label={isCopied ? t.copied : item.title || item.command}
+          >
+            {item.title && <span className="mini-row-title">{item.title}</span>}
+            <span className="mini-row-code-line">
+              <span className="mini-row-code">{item.command}</span>
+              {isCopied && (
+                <span className="mini-row-check" title={t.copied}>
+                  <CheckIcon />
+                </span>
+              )}
+            </span>
+          </button>
+          <div className="mini-row-actions">{renderRunControls(item)}</div>
+        </div>
       );
     };
     return (
@@ -2920,6 +3454,25 @@ export default function App() {
               }}
               aria-label={t.groupName}
             />
+            <label className="form-label">{t.defaultCwd}</label>
+            <FolderField
+              value={groupDefaultCwdInput}
+              onChange={(value) => {
+                setGroupDefaultCwdInput(value);
+                setGroupError("");
+              }}
+              label={t.defaultCwd}
+              chooseLabel={t.chooseFolder}
+              hint={t.folderInputHint}
+            />
+            <label className="form-label">{t.defaultShell}</label>
+            <ShellCheckboxes
+              value={groupDefaultShell}
+              onChange={setGroupDefaultShell}
+              label={t.defaultShell}
+              powershellLabel={t.powershell}
+              cmdLabel={t.cmd}
+            />
             <div className="form-actions">
               <button type="submit" className="btn btn--primary">
                 {t.add}
@@ -2985,6 +3538,108 @@ export default function App() {
               </option>
             ))}
           </select>
+          <label className="form-label">{t.runMode}</label>
+          <div className="run-mode-choices" role="radiogroup" aria-label={t.runMode}>
+            {(["inherit", "custom", "copy-only"] as RunMode[]).map((mode) => (
+              <label
+                key={mode}
+                className={`run-mode-choice${runModeInput === mode ? " is-active" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="run-mode"
+                  checked={runModeInput === mode}
+                  onChange={() => setRunModeInput(mode)}
+                />
+                {mode === "inherit"
+                  ? t.runModeInherit
+                  : mode === "custom"
+                    ? t.runModeCustom
+                    : t.runModeCopyOnly}
+              </label>
+            ))}
+          </div>
+          {runModeInput === "inherit" && (
+            <div className="field-hint">
+              {(() => {
+                const group = groups.find((g) => g.id === groupSelect);
+                const config = resolveEffectiveConfig(
+                  { ...(cmdForm.mode === "edit" ? cmdForm.item : ({} as CommandItem)), runMode: "inherit", groupId: groupSelect },
+                  group,
+                );
+                return config.shell
+                  ? fmt(t.inheritSummary, {
+                      cwd: config.cwd || "-",
+                      shell: shellLabel(config.shell, t),
+                    })
+                  : t.noShellConfigured;
+              })()}
+            </div>
+          )}
+          {runModeInput === "custom" && (
+            <>
+              <label className="form-label">{t.defaultShell}</label>
+              <ShellCheckboxes
+                value={customShell}
+                onChange={setCustomShell}
+                label={t.defaultShell}
+                powershellLabel={t.powershell}
+                cmdLabel={t.cmd}
+              />
+              <label className="form-label">{t.customCwd}</label>
+              <FolderField
+                value={customCwdInput}
+                onChange={setCustomCwdInput}
+                label={t.customCwd}
+                chooseLabel={t.chooseFolder}
+                hint={t.folderInputHint}
+              />
+            </>
+          )}
+          <div className="form-actions">
+            <button type="submit" className="btn btn--primary">
+              {t.save}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {editingGroupDefaultsId && (
+        <form
+          className="panel"
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveGroupDefaults();
+          }}
+        >
+          <div className="panel-head">
+            <div className="panel-title">{t.editGroupDefaults}</div>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setEditingGroupDefaultsId(null)}
+              title={t.cancel}
+              aria-label={t.cancel}
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          <label className="form-label">{t.defaultCwd}</label>
+          <FolderField
+            value={groupDefaultCwdInput}
+            onChange={setGroupDefaultCwdInput}
+            label={t.defaultCwd}
+            chooseLabel={t.chooseFolder}
+            hint={t.folderInputHint}
+          />
+          <label className="form-label">{t.defaultShell}</label>
+          <ShellCheckboxes
+            value={groupDefaultShell}
+            onChange={setGroupDefaultShell}
+            label={t.defaultShell}
+            powershellLabel={t.powershell}
+            cmdLabel={t.cmd}
+          />
           <div className="form-actions">
             <button type="submit" className="btn btn--primary">
               {t.save}
@@ -3083,6 +3738,15 @@ export default function App() {
                   </button>
                   <button
                     type="button"
+                    className="icon-btn"
+                    onClick={() => startEditGroupDefaults(group)}
+                    title={t.editGroupDefaults}
+                    aria-label={t.editGroupDefaults}
+                  >
+                    ⚙
+                  </button>
+                  <button
+                    type="button"
                     className="icon-btn icon-btn--danger"
                     onClick={() => requestDeleteGroup(group)}
                     title={t.deleteGroup}
@@ -3119,6 +3783,77 @@ export default function App() {
           {toast}
         </div>
       )}
+
+      {outputItemId && (() => {
+        const item = items.find((entry) => entry.id === outputItemId);
+        const result = runResults[outputItemId];
+        if (!item || !result) return null;
+        const output = [
+          result.stdout,
+          result.stderr ? `[stderr]\n${result.stderr}` : "",
+          result.error ? `[error]\n${result.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        return (
+          <div
+            className="modal-backdrop"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setOutputItemId(null);
+            }}
+          >
+            <div className="modal output-modal" role="dialog" aria-modal="true">
+              <div className="panel-head">
+                <div className="modal-title">{t.outputTitle}</div>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => setOutputItemId(null)}
+                  title={t.cancel}
+                  aria-label={t.cancel}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+              <div className="output-meta">
+                <span>{item.title || item.command}</span>
+                <span>
+                  {t.outputExitCode}: {result.exitCode ?? "-"}
+                </span>
+                <span>
+                  {t.outputShell}: {shellLabel(result.shell, t) || "-"}
+                </span>
+              </div>
+              <div className="output-meta">
+                <span>
+                  {t.outputCwd}: {result.cwd || "-"}
+                </span>
+              </div>
+              <div className="form-row output-sections">
+                <div className="output-section">
+                  <div className="form-label">{t.outputStdout}</div>
+                  <pre className="output-text">{result.stdout || "-"}</pre>
+                </div>
+                <div className="output-section">
+                  <div className="form-label">{t.outputStderr}</div>
+                  <pre className="output-text output-text--error">
+                    {result.stderr || result.error || "-"}
+                  </pre>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void copyOutput(output)}
+                >
+                  {t.copyOutput}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {confirmDialog && (
         <div
